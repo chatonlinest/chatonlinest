@@ -243,7 +243,7 @@
         .theme-submenu button:hover {
             background: #0056b3;
         }
-        /* Temas loucos akskskkska */
+        /* Temas loucos skksksks*/
         .theme-dark-blue .chat-container, .theme-dark-blue .messages, .theme-dark-blue .nickname-container, .theme-dark-blue .input-container {
             background: #0a192f;
             color: #ccd6f6;
@@ -384,12 +384,21 @@
         });
 
         function setNickname() {
-            nickname = document.getElementById('nickname').value.trim();
-            if (nickname) {
-                localStorage.setItem('nickname', nickname);
-                document.getElementById('nickname').disabled = true;
-                document.querySelector('.nickname-container button').disabled = true;
-                currentUser = nickname;
+            const newNickname = document.getElementById('nickname').value.trim();
+            if (newNickname) {
+                db.ref('nicknames').once('value', snapshot => {
+                    const nicknames = snapshot.val() || {};
+                    if (nicknames[newNickname]) {
+                        alert('Este apelido já está em uso. Por favor, escolha outro.');
+                    } else {
+                        db.ref('nicknames/' + newNickname).set(true);
+                        nickname = newNickname;
+                        localStorage.setItem('nickname', nickname);
+                        document.getElementById('nickname').disabled = true;
+                        document.querySelector('.nickname-container button').disabled = true;
+                        currentUser = nickname;
+                    }
+                });
             }
         }
 
