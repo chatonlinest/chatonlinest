@@ -243,7 +243,7 @@
         .theme-submenu button:hover {
             background: #0056b3;
         }
-        /* Temas loucos skksksks*/
+        /* Temas loucos skskksks*/
         .theme-dark-blue .chat-container, .theme-dark-blue .messages, .theme-dark-blue .nickname-container, .theme-dark-blue .input-container {
             background: #0a192f;
             color: #ccd6f6;
@@ -311,6 +311,16 @@
             background-color: #007bff;
             border-radius: 10px;
         }
+        /* Estilo para a contagem regressiva */
+        .countdown-container {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -319,6 +329,7 @@
             <input type="text" id="nickname" placeholder="Defina seu apelido">
             <button onclick="setNickname()">Definir Apelido</button>
         </div>
+        <div class="countdown-container" id="countdownContainer">Apagar tudo em: 24:00:00</div>
         <div id="messages" class="messages"></div>
         <div class="reply-area" id="replyArea">
             <p>Respondendo a: <strong id="replyTo"></strong></p>
@@ -371,6 +382,7 @@
         let isDarkTheme = false;
         let currentUser = '';
         let replyingTo = null;
+        const countdownContainer = document.getElementById('countdownContainer');
 
         document.addEventListener('DOMContentLoaded', () => {
             const savedNickname = localStorage.getItem('nickname');
@@ -380,6 +392,15 @@
                 document.getElementById('nickname').value = nickname;
                 document.getElementById('nickname').disabled = true;
                 document.querySelector('.nickname-container button').disabled = true;
+            }
+
+            const countdownStart = localStorage.getItem('countdownStart');
+            if (countdownStart) {
+                startCountdown(new Date(countdownStart));
+            } else {
+                const startTime = new Date();
+                localStorage.setItem('countdownStart', startTime);
+                startCountdown(startTime);
             }
         });
 
@@ -563,6 +584,39 @@
                 document.body.className = savedTheme;
             }
         });
+
+        function startCountdown(startTime) {
+            const countdownEnd = new Date(startTime.getTime() + 24 * 60 * 60 * 1000);
+
+            function updateCountdown() {
+                const now = new Date();
+                const timeRemaining = countdownEnd - now;
+
+                if (timeRemaining <= 0) {
+                    countdownContainer.textContent = "Tempo esgotado! Todas as mensagens serão apagadas.";
+                    clearInterval(countdownInterval);
+                    clearMessages();
+                } else {
+                    const hours = Math.floor(timeRemaining / (1000 * 60 * 60));
+                    const minutes = Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((timeRemaining % (1000 * 60)) / 1000);
+
+                    countdownContainer.textContent = `Tempo restante: ${hours}:${minutes}:${seconds}`;
+                }
+            }
+
+            const countdownInterval = setInterval(updateCountdown, 1000);
+            updateCountdown();
+        }
+
+        function clearMessages() {
+            db.ref('messages').remove().then(() => {
+                const messagesDiv = document.getElementById('messages');
+                messagesDiv.innerHTML = '';
+            }).catch(error => {
+                console.error('Erro ao limpar as mensagens:', error);
+            });
+        }
     </script>
 </body>
 </html>
