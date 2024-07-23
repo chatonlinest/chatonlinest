@@ -58,6 +58,20 @@
             background: #e0e0e0;
             color: #0056b3;
         }
+        .search-container {
+            padding: 10px;
+            background: #f1f1f1;
+            border-bottom: 2px solid #ddd;
+        }
+        .search-container input {
+            padding: 10px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            outline: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
         .messages {
             flex: 1;
             padding: 20px;
@@ -74,6 +88,9 @@
             background: #fff;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             position: relative;
+        }
+        .message.highlight {
+            background: #ffffcc;
         }
         .message img, .message video {
             max-width: 100%;
@@ -243,7 +260,7 @@
         .theme-submenu button:hover {
             background: #0056b3;
         }
-        /* Temas loucos skskksks*/
+        /* Temas loucos kasksksk*/
         .theme-dark-blue .chat-container, .theme-dark-blue .messages, .theme-dark-blue .nickname-container, .theme-dark-blue .input-container {
             background: #0a192f;
             color: #ccd6f6;
@@ -311,7 +328,7 @@
             background-color: #007bff;
             border-radius: 10px;
         }
-        /* Estilo para a contagem regressiva */
+        
         .countdown-container {
             text-align: center;
             font-size: 18px;
@@ -329,6 +346,9 @@
             <input type="text" id="nickname" placeholder="Defina seu apelido">
             <button onclick="setNickname()">Definir Apelido</button>
         </div>
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Pesquisar mensagens..." oninput="searchMessages()">
+        </div>
         <div class="countdown-container" id="countdownContainer">Apagar tudo em: 24:00:00</div>
         <div id="messages" class="messages"></div>
         <div class="reply-area" id="replyArea">
@@ -338,7 +358,7 @@
         <div class="input-container">
             <input type="text" id="messageInput" placeholder="Digite uma mensagem">
             <input type="file" id="fileInput" accept="image/*,video/*">
-            <label for="fileInput">📷</label>
+            <label for="fileInput">📷🎥</label>
             <button onclick="sendMessage()">Enviar</button>
         </div>
         <div class="progress-bar-container" id="progressBarContainer">
@@ -490,6 +510,7 @@
             const messageDiv = document.createElement('div');
             messageDiv.classList.add('message');
             messageDiv.setAttribute('data-id', messageId);
+            messageDiv.setAttribute('data-text', message.text);
             const date = new Date(message.timestamp).toLocaleTimeString();
             let messageContent = `<strong>${message.nickname}:</strong> `;
             
@@ -616,6 +637,22 @@
             }).catch(error => {
                 console.error('Erro ao limpar as mensagens:', error);
             });
+        }
+
+        function searchMessages() {
+            const searchInput = document.getElementById('searchInput');
+            const searchTerm = searchInput.value.toLowerCase();
+            const messagesDiv = document.getElementById('messages');
+            const messages = messagesDiv.getElementsByClassName('message');
+
+            for (let message of messages) {
+                const textContent = message.getAttribute('data-text').toLowerCase();
+                if (textContent.includes(searchTerm)) {
+                    message.classList.add('highlight');
+                } else {
+                    message.classList.remove('highlight');
+                }
+            }
         }
     </script>
 </body>
