@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Firebase Explorer - Einstein Edition</title>
+    <style>
+        :root {
+            --color-brand-primary: #673ab7;
+            --color-brand-primary-dark: #512da8;
+            --color-accent: #ff5722;
+            --color-accent-dark: #e64a19;
+            --color-background-light: #f8f8f8;
+            --color-surface: #ffffff;
+            --color-text-primary: #212121;
+            --color-text-secondary: #757575;
+            --color-feedback-accent: #ffeb3b;
+            --color-feedback-success: #4CAF50;
+            --color-feedback-success-dark: #388E3C;
+            --color-feedback-danger: #F44336;
+            --color-feedback-danger-dark: #D32F2F;
+            --color-feedback-warning: #FFC107;
+            --color-feedback-warning-dark: #FF9800;
+            --color-feedback-info: #03A9F4;
+            --color-feedback-info-dark: #0288D1;
+            --color-neutral-light: #ECEFF1;
+            --color-neutral-light-dark: #CFD8DC;
+            --color-neutral-dark: #37474F;
+            --color-neutral-dark-dark: #263238;
+
+            --component-background: var(--color-surface);
+            --component-shadow: 0 5px 10px rgba(0,0,0,0.12);
+            --component-border: 2px solid var(--color-neutral-light-dark);
+            --component-border-radius: 16px;
+            --component-padding: 35px;
+            --component-margin-bottom: 30px;
+            --component-transition-duration: 0.3s;
+            --component-transition-easing: ease;
+        }
+
+        body.theme-dark {
+            --color-background-light: #121212;
+            --color-surface: #1E1E1E;
+            --color-text-primary: #FFFFFF;
+            --color-text-secondary: #B0BEC5;
+            --component-background: var(--color-surface);
+            --component-shadow: 0 8px 20px rgba(0,0,0,0.5);
+            --component-border: 2px solid #303030;
+        }
+
+
+        body {
+            font-family: 'Roboto', 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: var(--color-background-light);
+            color: var(--color-text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            user-select: none;
+            transition: background-color 0.5s ease, color 0.5s ease;
+        }
+
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            padding: var(--component-padding);
+            margin: var(--component-padding) auto;
+            background: var(--component-background);
+            border-radius: var(--component-border-radius);
+            box-shadow: var(--component-shadow);
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: background-color 0.5s ease, box-shadow 0.5s ease;
+        }
+
+        .main-title {
+            color: var(--color-brand-primary);
+            margin-bottom: var(--component-margin-bottom);
+            text-align: center;
+            font-weight: 500;
+            letter-spacing: 0.8px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 3px rgba(0,0,0,0.08);
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 25px;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .theme-switcher {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .theme-switcher__label {
+            font-size: 1.1em;
+            color: var(--color-text-secondary);
+        }
+
+        .theme-switcher__checkbox {
+            appearance: none;
+            width: 50px;
+            height: 28px;
+            background: var(--color-neutral-light-dark);
+            border-radius: 20px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .theme-switcher__checkbox::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 4px;
+            width: 22px;
+            height: 22px;
+            background: var(--color-surface);
+            border-radius: 50%;
+            transition: left 0.3s ease;
+        }
+
+        .theme-switcher__checkbox:checked {
+            background: var(--color-brand-primary);
+        }
+
+        .theme-switcher__checkbox:checked::before {
+            left: 24px;
+        }
+
+        .change-url-button {
+            background: none;
+            border: none;
+            color: var(--color-brand-primary);
+            cursor: pointer;
+            padding: 12px 25px;
+            border-radius: 35px;
+            font-size: 1.1em;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color var(--component-transition-duration) var(--component-transition-easing), color var(--component-transition-duration) var(--component-transition-easing);
+        }
+
+        .change-url-button:hover {
+            background-color: rgba(103, 58, 183, 0.1);
+            color: var(--color-brand-primary-dark);
+        }
+
+
+        .search-bar {
+            display: flex;
+            margin-bottom: var(--component-margin-bottom);
+            border-radius: 30px;
+            background: var(--color-neutral-light);
+            padding: 10px 20px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.08);
+            align-items: center;
+            transition: box-shadow var(--component-transition-duration) var(--component-transition-easing), background-color 0.5s ease;
+        }
+
+        .search-bar:focus-within {
+            box-shadow: inset 0 3px 7px rgba(0,0,0,0.12);
+        }
+
+        .search-bar__input {
+            border: none;
+            background: transparent;
+            padding: 12px;
+            font-size: 1.1em;
+            color: var(--color-text-primary);
+            width: 100%;
+            outline: none;
+            transition: color 0.5s ease;
+        }
+
+        .search-bar__buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-bar__button, .search-bar__clear-button {
+            background: none;
+            border: none;
+            color: var(--color-accent);
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 50%;
+            transition: background-color var(--component-transition-duration) var(--component-transition-easing), color var(--component-transition-duration) var(--component-transition-easing);
+            font-size: 1em;
+        }
+
+        .search-bar__button:hover, .search-bar__clear-button:hover {
+            background-color: rgba(255, 87, 34, 0.15);
+            color: var(--color-accent-dark);
+        }
+
+        .search-bar__clear-button {
+            color: var(--color-feedback-danger);
+        }
+
+        .search-bar__clear-button:hover {
+             background-color: rgba(244, 67, 36, 0.15);
+            color: var(--color-feedback-danger-dark);
+        }
+
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+            backdrop-filter: blur(10px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.4s ease-out, visibility 0.4s ease-out;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal {
+            background: var(--component-background);
+            padding: 50px;
+            border-radius: 20px;
+            width: 95%;
+            max-width: 750px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            transform: translateY(-80px);
+            opacity: 0;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease-out, background-color 0.5s ease;
+        }
+
+        .modal-overlay.active .modal {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .modal__title {
+            color: var(--color-brand-primary-dark);
+            margin-top: 0;
+            margin-bottom: 35px;
+            text-align: center;
+            font-size: 2.3em;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .modal__input {
+            width: 100%;
+            padding: 18px;
+            margin: 15px 0 30px 0;
+            border: 2px solid var(--color-neutral-light-dark);
+            border-radius: 12px;
+            font-size: 1.2em;
+            transition: border-color var(--component-transition-duration), box-shadow var(--component-transition-duration), color 0.5s ease, background-color 0.5s ease;
+            background-color: var(--component-background);
+            color: var(--color-text-primary);
+        }
+
+        .modal__input:focus {
+            border-color: var(--color-accent);
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(255, 87, 34, 0.25);
+        }
+
+        .breadcrumb {
+            display: flex;
+            gap: 12px;
+            margin-bottom: var(--component-margin-bottom);
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 15px 25px;
+            background: var(--color-neutral-light);
+            border-radius: 35px;
+            box-shadow: inset 0 3px 7px rgba(0,0,0,0.1);
+            transition: background-color 0.5s ease, box-shadow 0.5s ease;
+        }
+
+        .breadcrumb__item {
+            cursor: pointer;
+            color: var(--color-accent);
+            padding: 12px 25px;
+            border-radius: 35px;
+            background: rgba(255, 87, 34, 0.08);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 280px;
+            transition: background-color var(--component-transition-duration) var(--component-transition-easing), color var(--component-transition-duration) var(--component-transition-easing), transform 0.2s ease;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .breadcrumb__item:hover {
+            background: var(--color-accent);
+            color: var(--color-surface);
+            transform: scale(1.05);
+            box-shadow: 0 5px 10px rgba(255, 87, 34, 0.3);
+        }
+
+        .rooms-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 30px;
+            margin-bottom: 45px;
+        }
+
+        .room-card {
+            padding: var(--component-padding);
+            border: var(--component-border);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: border-color var(--component-transition-duration) var(--component-transition-easing), box-shadow var(--component-transition-duration) var(--component-transition-easing), transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.5s ease;
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            background-color: var(--component-background);
+            box-shadow: var(--component-shadow);
+            overflow: hidden;
+        }
+
+        .room-card:hover {
+            border-color: var(--color-accent);
+            box-shadow: 0 15px 35px rgba(255, 87, 34, 0.35);
+            transform: translateY(-8px);
+        }
+
+        .room-card__title {
+            font-weight: 600;
+            margin: 0 0 20px 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--color-text-primary);
+            font-size: 1.4em;
+            letter-spacing: 0.7px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .room-card__type {
+            color: var(--color-text-secondary);
+            font-size: 1em;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .room-card__type i {
+            font-size: 0.9em;
+            color: var(--color-accent);
+        }
+
+        .room-card__delete-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: var(--color-feedback-danger);
+            cursor: pointer;
+            padding: 12px;
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease, background-color 0.3s ease;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.85);
+            transform: scale(0.8);
+        }
+
+        .room-card__delete-button:hover {
+            background-color: rgba(255, 255, 255, 0.95);
+            color: var(--color-feedback-danger-dark);
+            transform: scale(1.1);
+        }
+
+        .room-card:hover .room-card__delete-button {
+            opacity: 1;
+        }
+
+        .editor-container {
+            margin-top: 60px;
+        }
+
+        #editData {
+            width: 100%;
+            height: 750px;
+            padding: 30px;
+            border: var(--component-border);
+            border-radius: var(--component-border-radius);
+            font-family: 'Fira Code', monospace;
+            font-size: 18px;
+            tab-size: 2;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
+            line-height: 1.9;
+            background-color: var(--color-neutral-light);
+            color: var(--color-neutral-dark);
+            box-shadow: inset 0 3px 8px rgba(0,0,0,0.1);
+            resize: vertical;
+            outline: none;
+            scrollbar-width: thin;
+            scrollbar-color: var(--color-neutral-light-dark) var(--color-neutral-light);
+            overflow: auto;
+            transition: border-color var(--component-transition-duration) var(--component-transition-easing), box-shadow var(--component-transition-duration) var(--component-transition-easing), color 0.5s ease, background-color 0.5s ease;
+        }
+
+        #editData::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        #editData::-webkit-scrollbar-track {
+            background: var(--color-neutral-light);
+        }
+
+        #editData::-webkit-scrollbar-thumb {
+            background-color: var(--color-neutral-light-dark);
+            border-radius: 12px;
+        }
+
+        .CodeMirror {
+            height: auto;
+            border: var(--component-border);
+            border-radius: var(--component-border-radius);
+            font-family: 'Fira Code', monospace;
+            font-size: 18px;
+            line-height: 1.9;
+            transition: border-color var(--component-transition-duration) var(--component-transition-easing), box-shadow var(--component-transition-duration) var(--component-transition-easing), color 0.5s ease, background-color 0.5s ease;
+        }
+        .CodeMirror-scroll {
+             overflow: auto;
+        }
+
+
+        .cm-s-default .cm-string { color: #69c952; }
+        .cm-s-default .cm-number { color: #ff6b6b; }
+        .cm-s-default .cm-boolean { color: #f0ad4e; }
+        .cm-s-default .cm-keyword { color: #c084fc; }
+        .cm-s-default .cm-null { color: #a8a29e; }
+        .cm-s-default .cm-property { color: #54d1ef; }
+
+
+        .button-group {
+            margin-top: 40px;
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 18px 36px;
+            border: none;
+            border-radius: 16px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1.25em;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+        }
+
+        .btn--success {
+            background: var(--color-feedback-success);
+            color: var(--color-surface);
+        }
+
+        .btn--success:hover {
+            background: var(--color-feedback-success-dark);
+        }
+
+        .btn--primary {
+            background: var(--color-brand-primary);
+            color: var(--color-surface);
+        }
+
+        .btn--primary:hover {
+            background: var(--color-brand-primary-dark);
+        }
+
+        .btn--danger {
+            background: var(--color-feedback-danger);
+            color: var(--color-surface);
+        }
+
+        .btn--danger:hover {
+            background: var(--color-feedback-danger-dark);
+        }
+
+        .btn--info {
+            background: var(--color-feedback-info);
+            color: var(--color-surface);
+        }
+
+        .btn--info:hover {
+            background: var(--color-feedback-info-dark);
+        }
+
+        .btn--light {
+            background: var(--color-neutral-light);
+            color: var(--color-text-primary);
+            border: 1px solid var(--color-neutral-light-dark);
+        }
+
+        .btn--light:hover {
+            background: var(--color-neutral-light-dark);
+        }
+
+         .btn-close-status {
+            background: none;
+            border: none;
+            color: var(--color-surface);
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s ease;
+            padding: 8px;
+            border-radius: 50%;
+        }
+
+        .btn-close-status:hover {
+            opacity: 1;
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+
+        .add-button {
+            position: fixed;
+            bottom: 70px;
+            right: 70px;
+            padding: 25px;
+            border-radius: 50%;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.4);
+            background: var(--color-accent);
+            color: var(--color-surface);
+            border: none;
+            cursor: pointer;
+            font-size: 2.2em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.3s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.2s ease;
+        }
+
+        .add-button:hover {
+            background: var(--color-accent-dark);
+            transform: scale(1.2);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.45);
+        }
+
+        .status {
+            position: fixed;
+            top: 40px;
+            left: 40px;
+            padding: 20px 30px;
+            border-radius: 16px;
+            color: var(--color-surface);
+            font-weight: 600;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), visibility 0.5s ease, transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform: translateY(-60px);
+            z-index: 1300;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0, 0.3);
+        }
+
+        .status.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .status.success {
+            background-color: var(--color-feedback-success);
+        }
+
+        .status.error {
+            background-color: var(--color-feedback-danger);
+        }
+
+        .status__icon {
+            font-size: 1.5em;
+        }
+
+        .status__message {
+            font-size: 1.2em;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1250;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+            backdrop-filter: blur(3px);
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .loader {
+            border: 12px solid var(--color-neutral-light);
+            border-top: 12px solid var(--color-brand-primary);
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            animation: spin 1.6s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .room-card__context-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: var(--component-background);
+            border: var(--component-border);
+            border-radius: 12px;
+            padding: 8px 0;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            pointer-events: none;
+        }
+
+        .room-card__context-menu.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        .context-menu__item {
+            padding: 12px 25px;
+            cursor: pointer;
+            font-size: 1em;
+            color: var(--color-text-primary);
+            transition: background-color 0.2s ease, color 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .context-menu__item:hover {
+            background-color: var(--color-neutral-light);
+            color: var(--color-brand-primary);
+        }
+
+        .context-menu__item i {
+            font-size: 1em;
+            color: var(--color-accent);
+        }
+
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 25px;
+                margin: 20px;
+                border-radius: 18px;
+            }
+            .main-title {
+                font-size: 2.3em;
+                margin-bottom: 25px;
+            }
+            .search-bar {
+                margin-bottom: 25px;
+                padding: 8px 15px;
+                border-radius: 25px;
+            }
+            .search-bar__input {
+                padding: 10px;
+                font-size: 1em;
+            }
+            .search-bar__button, .search-bar__clear-button {
+                padding: 10px;
+            }
+            .rooms-grid {
+                grid-template-columns: repeat(auto-fill, minmax(100%, 1fr));
+                gap: 20px;
+            }
+            .room-card {
+                padding: 25px;
+                min-height: 140px;
+                border-radius: 18px;
+            }
+            .modal {
+                padding: 40px;
+                border-radius: 22px;
+            }
+            .modal__title {
+                font-size: 2.1em;
+                margin-bottom: 25px;
+            }
+            .modal__input {
+                padding: 14px;
+                font-size: 1.1em;
+                margin-bottom: 20px;
+                border-radius: 10px;
+            }
+            .breadcrumb {
+                padding: 12px 20px;
+                margin-bottom: 30px;
+                border-radius: 30px;
+            }
+            .breadcrumb__item {
+                max-width: 100%;
+                font-size: 1em;
+                padding: 10px 18px;
+                border-radius: 30px;
+            }
+            .button-group {
+                justify-content: center;
+                gap: 20px;
+                margin-top: 35px;
+            }
+            .btn {
+                padding: 14px 28px;
+                font-size: 1.1em;
+                gap: 10px;
+                border-radius: 14px;
+            }
+            .add-button {
+                bottom: 40px;
+                right: 40px;
+                padding: 20px;
+                font-size: 1.8em;
+            }
+            .status {
+                top: 20px;
+                left: 20px;
+                padding: 12px 20px;
+                gap: 8px;
+                border-radius: 14px;
+            }
+            .status__message {
+                font-size: 1em;
+            }
+            .status__icon {
+                font-size: 1.3em;
+            }
+            #editData {
+                height: 550px;
+                font-size: 17px;
+                padding: 20px;
+                border-radius: 14px;
+            }
+            .CodeMirror {
+                font-size: 17px;
+                border-radius: 14px;
+            }
+            .CodeMirror-scroll {
+                height: 550px;
+            }
+            .search-bar {
+                margin-bottom: 25px;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600&family=Fira+Code:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldgutter.min.css">
+
+</head>
+<body class="theme-light"> <header>
+        <div class="container">
+            <h1 class="main-title"><i class="fas fa-bolt" style="margin-right: 10px; color: var(--color-accent);"></i>Firebase Explorer</h1>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="toolbar">
+            <button class="change-url-button" onclick="showModal('initModal')" title="Mudar URL do Firebase" aria-label="Mudar URL do Firebase">
+                <i class="fas fa-link"></i> Add URL
+            </button>
+            <div class="theme-switcher">
+                <span class="theme-switcher__label">Modo Escravo</span>
+                <input type="checkbox" id="themeSwitcher" class="theme-switcher__checkbox">
+            </div>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" class="search-bar__input" id="searchInput" placeholder="Buscar chave ou valor...">
+            <div class="search-bar__buttons">
+                <button class="search-bar__button" onclick="searchItems()" title="Buscar" aria-label="Buscar"><i class="fas fa-search"></i></button>
+                <button class="search-bar__clear-button" onclick="clearSearch()" title="Limpar busca" aria-label="Limpar busca"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+
+         <div class="modal-overlay" id="initModal" role="dialog" aria-labelledby="initModalTitle">
+            <div class="modal">
+                <h2 class="modal__title" id="initModalTitle">🔌 Conectar ao Firebase</h2>
+                <input type="text" class="modal__input" id="firebaseUrl"
+                       placeholder="https://seu-projeto.firebaseio.com">
+                <div class="button-group">
+                    <button class="btn btn--success" onclick="connect()"><i class="fas fa-plug"></i> Conectar</button>
+                    <button class="btn btn--danger" onclick="closeModal('initModal')"><i class="fas fa-times"></i> Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="newItemModal" role="dialog" aria-labelledby="newItemModalTitle">
+            <div class="modal">
+                <h2 class="modal__title" id="newItemModalTitle"><i class="fas fa-plus-circle"></i> Novo Item</h2>
+                <input type="text" class="modal__input" id="newKey" placeholder="Nome da chave">
+                <textarea class="modal__input" id="newValue" rows="6" placeholder='Valor (JSON ex: "valor" ou "string")'></textarea>
+                <div class="button-group">
+                    <button class="btn btn--success" onclick="addNewItem()" id="addItemButton"><i class="fas fa-check"></i> Adicionar</button>
+                    <button class="btn btn--danger" onclick="closeModal('newItemModal')"><i class="fas fa-times"></i> Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="deleteModal" role="dialog" aria-labelledby="deleteModalTitle">
+            <div class="modal">
+                <h2 class="modal__title" id="deleteModalTitle"><i class="fas fa-trash-alt"></i> Confirmar Exclusão</h2>
+                <p id="deleteMessage" style="margin-bottom: 35px; font-size: 1.15em; line-height: 1.4;"></p>
+                <div class="button-group">
+                    <button class="btn btn--danger" onclick="confirmDelete()"><i class="fas fa-exclamation-triangle"></i> Excluir</button>
+                    <button class="btn btn--primary" onclick="closeModal('deleteModal')"><i class="fas fa-undo"></i> Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <main>
+        <div class="container" id="mainInterface">
+            <nav class="breadcrumb" id="breadcrumb"></nav>
+            <div id="roomsList" class="rooms-grid"></div>
+
+            <div class="editor-container" id="editor">
+                <div style="position: relative;"> <textarea id="editData"></textarea> </div>
+                <div class="button-group">
+                    <button class="btn btn--success" onclick="saveData()"><i class="fas fa-save"></i> Salvar</button>
+                    <button class="btn btn--danger" onclick="deleteCurrentNode()"><i class="fas fa-trash-alt"></i> Excluir</button>
+                    <button class="btn btn--primary" onclick="exitEditMode()"><i class="fas fa-arrow-left"></i> Voltar</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+
+    <button class="btn add-button" onclick="showNewItemModal()" title="Adicionar novo item">
+        <i class="fas fa-plus"></i>
+    </button>
+
+    <div id="status" class="status">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <i id="statusIcon" class="status__icon"></i>
+            <span id="statusMessage" class="status__message"></span>
+        </div>
+        <button class="btn-close-status" onclick="closeStatus()" title="Fechar status" aria-label="Fechar status"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldgutter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/brace-fold.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/comment-fold.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.min.js"></script>
+
+
+    <script>
+        let currentPath = [];
+        let baseUrl = '';
+        let itemToDelete = null;
+        let currentData = null;
+        let editor = null;
+        let searchQuery = '';
+        let isDarkMode = false;
+
+        function connect() {
+            baseUrl = document.getElementById('firebaseUrl').value.replace(/\/?$/, '');
+            if (!baseUrl) return showStatus('❌ URL inválida', 'error', 'fas fa-times-circle');
+
+            localStorage.setItem('firebaseUrl', baseUrl);
+            closeModal('initModal');
+            loadCurrentPath();
+            document.querySelector('.add-button').style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+            if(modalId === 'initModal') {
+                document.getElementById('mainInterface').style.display = 'block';
+            }
+             if (modalId === 'newItemModal') {
+                document.getElementById('newKey').value = '';
+                document.getElementById('newValue').value = '';
+            }
+             if (modalId === 'deleteModal') {
+                itemToDelete = null;
+            }
+        }
+
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function showNewItemModal() {
+            showModal('newItemModal');
+        }
+
+
+        async function addNewItem() {
+            const key = document.getElementById('newKey').value;
+            const value = document.getElementById('newValue').value;
+
+            if(!key) {
+                 showStatus('❌ Insira um nome para a chave', 'error', 'fas fa-times-circle');
+                 return;
+            }
+
+            try {
+                let parsedValue;
+                try {
+                    parsedValue = value ? JSON.parse(value) : null;
+                } catch (e) {
+                    parsedValue = value;
+                }
+                const path = currentPath.join('/');
+                const url = `${baseUrl}/${path ? path + '/' : ''}${key}.json`;
+
+                showLoading(true);
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    body: JSON.stringify(parsedValue),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) throw new Error('Falha ao adicionar item');
+
+                closeModal('newItemModal');
+                showStatus('✅ Item adicionado!', 'success', 'fas fa-check-circle');
+                loadCurrentPath();
+            } catch (error) {
+                showStatus(`❌ Erro ao adicionar: ${error.message}`, 'error', 'fas fa-exclamation-triangle');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showDeleteConfirmation(key) {
+            itemToDelete = key;
+            const path = currentPath.join('/');
+            const fullPath = path ? `${path}/${key}` : key;
+            document.getElementById('deleteMessage').textContent =
+                `Tem certeza que deseja excluir permanentemente "${key}"?\nCaminho: ${fullPath}`;
+            showModal('deleteModal');
+        }
+
+        async function confirmDelete() {
+            if (!itemToDelete) return;
+
+            try {
+                const path = currentPath.join('/');
+                const url = `${baseUrl}/${path ? path + '/' : ''}${itemToDelete}.json`;
+
+                showLoading(true);
+                const response = await fetch(url, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) throw new Error('Falha ao excluir item');
+
+                showStatus('✅ Item excluído!', 'success', 'fas fa-check-circle');
+                closeModal('deleteModal');
+                loadCurrentPath();
+            } catch (error) {
+                showStatus(`❌ Erro ao excluir: ${error.message}`, 'error', 'fas fa-exclamation-triangle');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function deleteCurrentNode() {
+            itemToDelete = currentPath.slice(-1)[0];
+            showDeleteConfirmation(itemToDelete);
+        }
+
+        async function loadCurrentPath() {
+            try {
+                const path = currentPath.join('/');
+                const url = `${baseUrl}/${path}.json`;
+
+                showLoading(true);
+                const response = await fetch(url);
+                const data = await response.json();
+                currentData = data;
+
+                if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+                    showRooms(data);
+                } else if (data !== null) {
+                    enterEditMode(data);
+                } else {
+                    enterEditMode(null);
+                }
+                updateBreadcrumb();
+            } catch (error) {
+                showRooms({});
+                updateBreadcrumb();
+                showStatus(`❌ Erro ao carregar: ${error.message}`, 'error', 'fas fa-exclamation-triangle');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showRooms(rooms) {
+            const container = document.getElementById('roomsList');
+            container.innerHTML = '';
+
+            if(rooms) {
+                Object.keys(rooms).sort().forEach(key => {
+                    if (searchFilter(key, rooms[key])) {
+                        const card = createRoomCard(key, rooms[key]);
+                        container.appendChild(card);
+                    }
+                });
+            } else {
+                container.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary); padding: 20px;">Nenhum item aqui.</p>';
+            }
+
+            document.getElementById('editor').style.display = 'none';
+            container.style.display = 'grid';
+        }
+
+        function createRoomCard(key, value) {
+            const card = document.createElement('div');
+            card.className = 'room-card';
+
+            let typeIcon = '';
+            let typeText = '';
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                typeIcon = '<i class="fas fa-folder"></i>';
+                typeText = 'Pasta';
+            } else if (typeof value === 'number') {
+                typeIcon = '<i class="fas fa-sort-numeric-up"></i>';
+                typeText = 'Número';
+            } else if (typeof value === 'boolean') {
+                typeIcon = '<i class="far fa-check-square"></i>';
+                typeText = 'Booleano';
+            } else if (value === null) {
+                typeIcon = '<i class="far fa-circle"></i>';
+                typeText = 'Null';
+            }
+             else {
+                typeIcon = '<i class="fas fa-file-code"></i>';
+                typeText = 'Arquivo';
+            }
+
+
+            card.innerHTML = `
+                <button class="room-card__delete-button" onclick="event.stopPropagation(); showDeleteConfirmation('${key}')" title="Excluir item" aria-label="Excluir item"><i class="fas fa-trash-alt"></i></button>
+                <h3 class="room-card__title">${key}</h3>
+                <p class="room-card__type">${typeIcon} ${typeText}</p>
+                <div class="room-card__context-menu" id="contextMenu-${key}">
+                    <div class="context-menu__item" onclick="navigateTo('${key}')"><i class="fas fa-folder-open"></i> Abrir</div>
+                    <div class="context-menu__item" onclick="showNewItemModalFor('${key}')"><i class="fas fa-plus-circle"></i> Novo Item Aqui</div>
+                    <div class="context-menu__item" onclick="copyKey('${key}')"><i class="fas fa-key"></i> Copiar Chave</div>
+                    <div class="context-menu__item" onclick="copyValue('${value}')"><i class="far fa-clipboard"></i> Copiar Valor</div>
+                    <div class="context-menu__item context-menu__item--delete" onclick="showDeleteConfirmation('${key}')"><i class="fas fa-trash-alt"></i> Excluir</div>
+                </div>
+            `;
+            card.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                showContextMenu(e, key);
+            });
+            card.onclick = () => navigateTo(key);
+
+            return card;
+        }
+
+        function showNewItemModalFor(key) {
+            currentPath.push(key);
+            showNewItemModal();
+        }
+
+        function copyKey(key) {
+            navigator.clipboard.writeText(key).then(() => {
+                showStatus('✅ Chave copiada para a área de transferência!', 'success', 'fas fa-clipboard-check');
+            }).catch(err => {
+                showStatus('❌ Falha ao copiar chave', 'error', 'fas fa-clipboard-exclamation');
+                console.error('Erro ao copiar chave: ', err);
+            });
+        }
+
+        function copyValue(value) {
+            const stringValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+             navigator.clipboard.writeText(stringValue).then(() => {
+                showStatus('✅ Valor copiado para a área de transferência!', 'success', 'fas fa-clipboard-check');
+            }).catch(err => {
+                showStatus('❌ Falha ao copiar valor', 'error', 'fas fa-clipboard-exclamation');
+                console.error('Erro ao copiar valor: ', err);
+            });
+        }
+
+        let activeContextMenu = null;
+
+        function showContextMenu(event, key) {
+            if (activeContextMenu) {
+                activeContextMenu.classList.remove('active');
+            }
+            const contextMenu = document.getElementById(`contextMenu-${key}`);
+            contextMenu.classList.add('active');
+            contextMenu.style.left = `${event.clientX}px`;
+            contextMenu.style.top = `${event.clientY}px`;
+            activeContextMenu = contextMenu;
+
+            document.addEventListener('click', function closeMenu(e) {
+                if (!contextMenu.contains(e.target) && activeContextMenu) {
+                    activeContextMenu.classList.remove('active');
+                    activeContextMenu = null;
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }
+
+
+        function enterEditMode(data) {
+            document.getElementById('roomsList').style.display = 'none';
+            document.getElementById('editor').style.display = 'block';
+            if (editor) {
+                 editor.setValue(JSON.stringify(data, null, 4));
+            } else {
+                editor = CodeMirror.fromTextArea(document.getElementById('editData'), {
+                    mode: 'javascript',
+                    lineNumbers: true,
+                    lineWrapping: true,
+                    foldGutter: true,
+                    gutters: ["CodeMirror-linenumbers", "CodeMirror-foldgutter"],
+                    matchBrackets: true,
+                    autoCloseBrackets: true,
+                    styleActiveLine: true,
+                    theme: 'default'
+                });
+                 editor.setValue(JSON.stringify(data, null, 4));
+            }
+        }
+
+        function exitEditMode() {
+            currentPath.pop();
+            loadCurrentPath();
+        }
+
+        function navigateTo(key) {
+            currentPath.push(key);
+            loadCurrentPath();
+        }
+
+        function updateBreadcrumb() {
+            const breadcrumb = document.getElementById('breadcrumb');
+            breadcrumb.innerHTML = '';
+
+            const rootItem = document.createElement('div');
+            rootItem.className = 'breadcrumb__item';
+            rootItem.innerHTML = '<i class="fas fa-home"></i> Início';
+            rootItem.onclick = () => {
+                currentPath = [];
+                loadCurrentPath();
+            };
+            breadcrumb.appendChild(rootItem);
+
+            currentPath.forEach((segment, index) => {
+                const item = document.createElement('div');
+                item.className = 'breadcrumb__item';
+                item.textContent = segment;
+                item.onclick = () => {
+                    currentPath = currentPath.slice(0, index + 1);
+                    loadCurrentPath();
+                };
+                breadcrumb.appendChild(item);
+            });
+        }
+
+        async function saveData() {
+            try {
+                const path = currentPath.join('/');
+                const url = `${baseUrl}/${path}.json`;
+                const dataText = editor.getValue();
+                const data = JSON.parse(dataText);
+
+                showLoading(true);
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    body: JSON.stringify(data),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) throw new Error('Falha ao salvar');
+                showStatus('✅ Dados salvos!', 'success', 'fas fa-check-circle');
+                currentData = data;
+            } catch (error) {
+                showStatus(`❌ Erro ao salvar JSON: ${error.message}`, 'error', 'fas fa-exclamation-triangle');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function searchItems() {
+            searchQuery = document.getElementById('searchInput').value.toLowerCase();
+            loadCurrentPath();
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            searchQuery = '';
+            loadCurrentPath();
+        }
+
+        function searchFilter(key, value) {
+            if (!searchQuery) return true;
+
+            const keyLower = key.toLowerCase();
+            const valueString = typeof value === 'object' ? JSON.stringify(value).toLowerCase() : String(value).toLowerCase();
+
+            return keyLower.includes(searchQuery) || valueString.includes(searchQuery);
+        }
+
+
+        function showStatus(message, type, iconClass) {
+            const statusDiv = document.getElementById('status');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusMessage = document.getElementById('statusMessage');
+            const statusCloseButton = document.querySelector('.btn-close-status');
+
+
+            statusMessage.textContent = message;
+            statusIcon.className = `status__icon ${iconClass}`;
+            statusDiv.className = `status ${type} active`;
+            statusCloseButton.style.display = 'block';
+        }
+
+        function closeStatus() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.classList.remove('active');
+        }
+
+        function showLoading(isLoading) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (isLoading) {
+                loadingOverlay.classList.add('active');
+            } else {
+                loadingOverlay.classList.remove('active');
+            }
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            localStorage.setItem('darkMode', isDarkMode);
+            applyTheme();
+        }
+
+        function applyTheme() {
+            if (isDarkMode) {
+                document.body.classList.add('theme-dark');
+                document.body.classList.remove('theme-light');
+            } else {
+                document.body.classList.remove('theme-dark');
+                document.body.classList.add('theme-light');
+            }
+        }
+
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedUrl = localStorage.getItem('firebaseUrl');
+            const newItemModal = document.getElementById('newItemModal');
+            const deleteModal = document.getElementById('deleteModal');
+            const initModal = document.getElementById('initModal');
+            const mainInterface = document.getElementById('mainInterface');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const statusCloseButton = document.querySelector('.btn-close-status');
+            const themeSwitcherCheckbox = document.getElementById('themeSwitcher');
+
+
+            newItemModal.style.display = 'flex';
+            deleteModal.style.display = 'flex';
+            initModal.style.display = 'flex';
+            mainInterface.style.display = 'flex';
+            loadingOverlay.style.display = 'flex';
+            statusCloseButton.style.display = 'none';
+
+
+            if (savedUrl) {
+                baseUrl = savedUrl;
+                closeModal('initModal');
+                loadCurrentPath();
+                document.querySelector('.add-button').style.display = 'flex';
+            } else {
+                showModal('initModal');
+                mainInterface.style.display = 'none';
+                document.querySelector('.add-button').style.display = 'none';
+            }
+
+            const savedTheme = localStorage.getItem('darkMode');
+            isDarkMode = savedTheme === 'true';
+            themeSwitcherCheckbox.checked = isDarkMode;
+            applyTheme();
+
+            themeSwitcherCheckbox.addEventListener('change', toggleTheme);
+
+
+            document.getElementById('newItemModal').addEventListener('submit', function(event) {
+                event.preventDefault();
+                addNewItem();
+            });
+        });
+    </script>
+</body>
+</html>
