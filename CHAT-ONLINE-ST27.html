@@ -3467,6 +3467,8 @@
         const DEFAULT_PROFILE_COVER = "https://firebasestorage.googleapis.com/v0/b/stevest-sr.appspot.com/o/CHAT-ONLINE-ST%2Fdefault-cover.jpg?alt=media&token=7d07c51a-70ba-4a86-a0aa-243f3d54ef49";
         const STIA_NAME = 'STIA';
         const STIA_PROFILE_PIC = DEFAULT_PROFILE_PIC;
+        const STIA_PROTECTED_OWNER = 'STEVEST';
+        const STIA_DEFAULT_PRIVATE_PARTNER = 'STEVEST';
         const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM";
         const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
 
@@ -3958,12 +3960,18 @@
                 showAlertModal('PERMISSÃO NEGADA', 'APENAS ADMINISTRADORES PODEM CONCEDER PREMIUM.', 'fas fa-exclamation-triangle', 'error');
                 return;
             }
-            
+
             if (!username) {
                 showAlertModal('SELECIONE UM USUÁRIO', 'POR FAVOR, SELECIONE UM USUÁRIO PARA CONCEDER PREMIUM.', 'fas fa-user-circle', 'info');
                 return;
             }
-            
+
+            if (username === STIA_PROTECTED_OWNER && currentUserNickname !== STIA_PROTECTED_OWNER) {
+                showAlertModal('AÇÃO BLOQUEADA', 'NENHUM ADMINISTRADOR PODE ALTERAR O PREMIUM DO STEVEST.', 'fas fa-ban', 'error');
+                await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'alterar o Premium');
+                return;
+            }
+
             if (!days || days < 1) {
                 showAlertModal('DIAS INVÁLIDOS', 'POR FAVOR, INSIRA UM NÚMERO VÁLIDO DE DIAS.', 'fas fa-calendar-alt', 'warning');
                 return;
@@ -4006,12 +4014,18 @@
                 showAlertModal('PERMISSÃO NEGADA', 'APENAS ADMINISTRADORES PODEM REVOGAR PREMIUM.', 'fas fa-exclamation-triangle', 'error');
                 return;
             }
-            
+
             if (!username) {
                 showAlertModal('SELECIONE UM USUÁRIO', 'POR FAVOR, SELECIONE UM USUÁRIO PARA REVOGAR PREMIUM.', 'fas fa-user-circle', 'info');
                 return;
             }
-            
+
+            if (username === STIA_PROTECTED_OWNER && currentUserNickname !== STIA_PROTECTED_OWNER) {
+                showAlertModal('AÇÃO BLOQUEADA', 'NENHUM ADMINISTRADOR PODE REVOGAR O PREMIUM DO STEVEST.', 'fas fa-ban', 'error');
+                await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'revogar o Premium');
+                return;
+            }
+
             const confirmed = await showConfirmModal(
                 'REVOGAR PREMIUM',
                 `TEM CERTEZA QUE DESEJA REVOGAR O PREMIUM DE ${username}?`,
@@ -4167,6 +4181,163 @@
             }
         }
 
+        async function stiaDemoteAdminForStevestAttempt(adminNickname, attemptedAction) {
+            if (!adminNickname || adminNickname === STIA_PROTECTED_OWNER || adminNickname === STIA_NAME) return;
+            const adminData = allUsersData[adminNickname];
+            const isAdmin = adminData && (adminData.adminLevel > 0 || adminData.isAdmin);
+            if (!isAdmin) return;
+            try {
+                await usersProfileRef.child(adminNickname).update({
+                    adminLevel: 0,
+                    isAdmin: false
+                });
+                await addNewsItem(STIA_NAME, 'demote_admin', adminNickname, null, 0);
+                await stiaSendMessage(`⚡ ${adminNickname} foi rebaixado por tentar ${attemptedAction} o ${STIA_PROTECTED_OWNER}.`);
+            } catch (error) {
+                console.error('STIA: erro ao rebaixar admin abusivo.', error);
+            }
+        }
+
+        async function stiaClearUserMessages(nickname, options = {}) {
+            if (!nickname || nickname === STIA_NAME) return;
+            const { notify = true } = options;
+            try {
+                const snapshot = await messagesRef.orderByChild('senderNickname').equalTo(nickname).once('value');
+                if (!snapshot.exists()) {
+                    if (notify) {
+                        await stiaSendMessage(`ℹ️ Nenhuma mensagem recente de ${nickname} foi encontrada para limpeza.`);
+                    }
+                    return;
+                }
+
+                const updates = {};
+                const mediaToDelete = [];
+                snapshot.forEach(childSnapshot => {
+                    updates[childSnapshot.key] = null;
+                    const messageData = childSnapshot.val();
+                    if (messageData.mediaUrl) {
+                        mediaToDelete.push(messageData.mediaUrl);
+                    }
+                });
+
+                await messagesRef.update(updates);
+
+                for (const url of mediaToDelete) {
+                    try {
+                        const fileRef = storage.refFromURL(url);
+                        await fileRef.delete();
+                    } catch (mediaError) {
+                        console.error(`STIA: erro ao excluir mídia do usuário ${nickname}:`, mediaError);
+                    }
+                }
+
+                if (notify) {
+                    await addNewsItem(STIA_NAME, 'clear_messages', nickname);
+                    await stiaSendMessage(`🧹 Todas as mensagens de ${nickname} foram removidas pelo sistema.`);
+                }
+            } catch (error) {
+                console.error('STIA: erro ao limpar mensagens automaticamente.', error);
+            }
+        }
+
+        async function stiaDeleteUserProfile(nickname, reason = '') {
+            if (!nickname || nickname === STIA_NAME || nickname === STIA_PROTECTED_OWNER) return;
+            try {
+                await usersProfileRef.child(nickname).remove();
+                await stiaClearUserMessages(nickname, { notify: false });
+                await addNewsItem(STIA_NAME, 'delete_profile', nickname);
+                const message = reason ? `${reason}` : 'conduta incompatível com o chat.';
+                await stiaSendMessage(`❌ O perfil de ${nickname} foi deletado pela STIA (${message}).`);
+            } catch (error) {
+                console.error('STIA: erro ao deletar perfil automaticamente.', error);
+            }
+        }
+
+        async function stiaUpdateAdminLevel(nickname, newAdminLevel, reason = '') {
+            if (!nickname || nickname === STIA_NAME || nickname === STIA_PROTECTED_OWNER) return;
+            const sanitizedLevel = Math.max(0, Math.min(5, parseInt(newAdminLevel, 10) || 0));
+            try {
+                await usersProfileRef.child(nickname).update({
+                    adminLevel: sanitizedLevel,
+                    isAdmin: sanitizedLevel > 0
+                });
+                await addNewsItem(STIA_NAME, sanitizedLevel > 0 ? 'promote_admin' : 'demote_admin', nickname, null, sanitizedLevel);
+                const statusText = sanitizedLevel > 0 ? `agora é admin nível ${sanitizedLevel}` : 'foi removido da administração';
+                const extra = reason ? ` Motivo: ${reason}` : '';
+                await stiaSendMessage(`👑 ${nickname} ${statusText}.${extra}`);
+            } catch (error) {
+                console.error('STIA: erro ao gerenciar administradores.', error);
+            }
+        }
+
+        async function stiaGrantPremium(nickname, days, reason = '', isUnlimited = false) {
+            if (!nickname || nickname === STIA_NAME) return;
+            try {
+                const durationDays = isUnlimited ? 'ILIMITADO' : Math.max(1, parseInt(days, 10) || 30);
+                const now = Date.now();
+                const expiryDate = isUnlimited ? null : now + (parseInt(durationDays, 10) * 24 * 60 * 60 * 1000);
+                await usersProfileRef.child(nickname).update({
+                    isPremium: true,
+                    premiumExpiry: expiryDate
+                });
+                await addNewsItem(STIA_NAME, 'grant_premium', nickname, durationDays);
+                const extra = reason ? ` ${reason}` : '';
+                await stiaSendMessage(`⭐ ${nickname} recebeu Premium ${isUnlimited ? 'ilimitado' : `por ${durationDays} dias`}.${extra}`);
+            } catch (error) {
+                console.error('STIA: erro ao conceder Premium automaticamente.', error);
+            }
+        }
+
+        async function stiaRevokePremium(nickname, reason = '') {
+            if (!nickname || nickname === STIA_NAME) return;
+            try {
+                await usersProfileRef.child(nickname).update({
+                    isPremium: false,
+                    premiumExpiry: null
+                });
+                await addNewsItem(STIA_NAME, 'revoke_premium', nickname);
+                const extra = reason ? ` Motivo: ${reason}` : '';
+                await stiaSendMessage(`💔 O Premium de ${nickname} foi revogado.${extra}`);
+            } catch (error) {
+                console.error('STIA: erro ao revogar Premium automaticamente.', error);
+            }
+        }
+
+        async function stiaAccessPrivateChat(targetNickname, partnerNickname) {
+            if (!targetNickname) return;
+            const participantA = targetNickname;
+            const participantB = partnerNickname && partnerNickname !== participantA ? partnerNickname : STIA_DEFAULT_PRIVATE_PARTNER;
+            if (participantA === participantB) return;
+            try {
+                const chatKey = getPrivateChatKey(participantA, participantB);
+                const snapshot = await privateMessagesRef.child(chatKey).limitToLast(8).once('value');
+                const excerpts = [];
+                snapshot.forEach(child => {
+                    const data = child.val();
+                    if (!data) return;
+                    let content = data.text || '';
+                    if (!content && data.mediaUrl) {
+                        content = '[MÍDIA]';
+                    }
+                    if (!content) {
+                        content = '[MENSAGEM]';
+                    }
+                    excerpts.push(`${data.senderNickname}: ${content}`);
+                });
+
+                if (excerpts.length === 0) {
+                    await stiaSendMessage(`🔍 STIA auditou o chat privado entre ${participantA} e ${participantB}, sem mensagens recentes.`);
+                    return;
+                }
+
+                const summary = excerpts.join(' | ');
+                const trimmedSummary = summary.length > 400 ? `${summary.slice(0, 400)}...` : summary;
+                await stiaSendMessage(`🔍 STIA auditou o chat privado entre ${participantA} e ${participantB}: ${trimmedSummary}`);
+            } catch (error) {
+                console.error('STIA: erro ao acessar chat privado.', error);
+            }
+        }
+
         async function stiaRemoveMessage(messageKey) {
             if (!messageKey) return;
             try {
@@ -4259,7 +4430,7 @@
         }
 
         async function stiaHandleStevestCommand(commandText) {
-            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat"}. Pedido: "${commandText}"`;
+            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|deletar_perfil|limpar_mensagens|gerenciar_admin|premium|acesso_privado|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat","nivelAdmin":0,"premiumDias":0,"tipoPremium":"conceder|revogar|ilimitado","chatParceiro":"SEGUNDO USUÁRIO OU VAZIO"}. Pedido: "${commandText}"`;
             const response = await callStiaApi(prompt);
             const parsed = extractStiaJson(response);
             if (!parsed) return false;
@@ -4269,6 +4440,10 @@
             const target = parsed.alvo ? parsed.alvo.trim() : '';
             const duration = parsed.duracaoMinutos || 0;
             const message = parsed.mensagem || '';
+            const nivelAdmin = parsed.nivelAdmin ?? parsed.nivel ?? 0;
+            const premiumDias = parsed.premiumDias ?? parsed.diasPremium ?? 0;
+            const tipoPremium = (parsed.tipoPremium || parsed.acaoPremium || '').toLowerCase();
+            const chatPartner = parsed.chatParceiro || parsed.parceiro || parsed.segundoAlvo || '';
 
             switch (actionRaw) {
                 case 'mensagem':
@@ -4299,6 +4474,53 @@
                 case 'desmutar':
                     if (target) {
                         await stiaUnmuteUser(target);
+                        return true;
+                    }
+                    break;
+                case 'deletar_perfil':
+                case 'delete_profile':
+                    if (target) {
+                        await stiaDeleteUserProfile(target, message || 'Solicitação direta do STEVEST.');
+                        return true;
+                    }
+                    break;
+                case 'limpar_mensagens':
+                case 'limpar':
+                case 'clear_messages':
+                    if (target) {
+                        await stiaClearUserMessages(target);
+                        if (message) {
+                            await stiaSendMessage(message);
+                        }
+                        return true;
+                    }
+                    break;
+                case 'gerenciar_admin':
+                case 'admin':
+                    if (target) {
+                        await stiaUpdateAdminLevel(target, nivelAdmin, message);
+                        return true;
+                    }
+                    break;
+                case 'premium':
+                case 'gerenciar_premium':
+                    if (target) {
+                        if (tipoPremium === 'revogar') {
+                            await stiaRevokePremium(target, message);
+                        } else {
+                            const isUnlimited = tipoPremium === 'ilimitado';
+                            await stiaGrantPremium(target, premiumDias || 30, message, isUnlimited);
+                        }
+                        return true;
+                    }
+                    break;
+                case 'acesso_privado':
+                case 'acessar_privado':
+                    if (target) {
+                        await stiaAccessPrivateChat(target, chatPartner);
+                        if (message) {
+                            await stiaSendMessage(message);
+                        }
                         return true;
                     }
                     break;
@@ -7360,8 +7582,11 @@
                 return;
             }
             
-            if (selectedUser === 'STEVEST') {
+            if (selectedUser === STIA_PROTECTED_OWNER) {
                 await showAlertModal('ERRO', 'VOCÊ NÃO PODE BANIR O STEVEST.', 'fas fa-exclamation-circle', 'error');
+                if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                    await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'banir');
+                }
                 return;
             }
             
@@ -7422,8 +7647,11 @@
                 return;
             }
             
-            if (selectedUser === 'STEVEST' || selectedUser === currentUserNickname) {
+            if (selectedUser === STIA_PROTECTED_OWNER || selectedUser === currentUserNickname) {
                  await showAlertModal('ERRO', 'VOCÊ NÃO PODE SILENCIAR/DESSILENCIAR O STEVEST OU A SI MESMO.', 'fas fa-exclamation-circle', 'error');
+                 if (selectedUser === STIA_PROTECTED_OWNER && currentUserNickname !== STIA_PROTECTED_OWNER) {
+                    await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'silenciar');
+                 }
                  return;
             }
             
@@ -7487,6 +7715,14 @@
                 showAlertModal('SELECIONE UM USUÁRIO', 'POR FAVOR, SELECIONE UM USUÁRIO PARA LIMPAR MENSAGENS.', 'fas fa-user-circle', 'info');
                 return;
             }
+
+            if (selectedUser === STIA_PROTECTED_OWNER) {
+                await showAlertModal('ERRO', 'VOCÊ NÃO PODE LIMPAR AS MENSAGENS DO STEVEST.', 'fas fa-exclamation-circle', 'error');
+                if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                    await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'limpar mensagens');
+                }
+                return;
+            }
             
             const targetData = allUsersData[selectedUser];
             const targetAdminLevel = targetData ? (targetData.adminLevel || 0) : 0;
@@ -7543,7 +7779,7 @@
                 showAlertModal('SELECIONE UM USUÁRIO', 'POR FAVOR, SELECIONE UM USUÁRIO PARA DELETAR O PERFIL.', 'fas fa-user-circle', 'info');
                 return;
             }
-            
+
             const targetData = allUsersData[selectedUser];
             const targetAdminLevel = targetData ? (targetData.adminLevel || 0) : 0;
             
@@ -7552,8 +7788,11 @@
                 return;
             }
             
-            if (selectedUser === 'STEVEST') {
+            if (selectedUser === STIA_PROTECTED_OWNER) {
                 await showAlertModal('ERRO', 'VOCÊ NÃO PODE DELETAR O PERFIL DO STEVEST.', 'fas fa-exclamation-circle', 'error');
+                if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                    await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'deletar o perfil');
+                }
                 return;
             }
             
@@ -7588,8 +7827,11 @@
                 return;
             }
             
-            if (selectedUser === 'STEVEST') {
+            if (selectedUser === STIA_PROTECTED_OWNER) {
                 await showAlertModal('ERRO', 'VOCÊ NÃO PODE ALTERAR O STATUS DE ADMINISTRADOR DO STEVEST.', 'fas fa-exclamation-circle', 'error');
+                if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                    await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'mexer na coroa');
+                }
                 return;
             }
             
@@ -7672,7 +7914,13 @@
                 await showAlertModal('SELECIONE UM USUÁRIO', 'POR FAVOR, SELECIONE UM USUÁRIO PARA ACESSAR O CHAT PRIVADO.', 'fas fa-user-circle', 'info');
                 return;
             }
-            
+
+            if (selectedUser === STIA_PROTECTED_OWNER && currentUserNickname !== STIA_PROTECTED_OWNER) {
+                await showAlertModal('ERRO', 'NENHUM ADMINISTRADOR PODE ESPIONAR O CHAT PRIVADO DO STEVEST.', 'fas fa-eye-slash', 'error');
+                await stiaDemoteAdminForStevestAttempt(currentUserNickname, 'espionar o STEVEST');
+                return;
+            }
+
             if (!isAdminOrStevest()) {
                 await showAlertModal('PERMISSÃO NEGADA', 'APENAS ADMINISTRADORES PODEM ACESSAR CHATS PRIVADOS DE OUTROS USUÁRIOS.', 'fas fa-exclamation-triangle', 'error');
                 return;
