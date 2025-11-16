@@ -68,6 +68,36 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
             transition: all 0.2s ease;
         }
+
+        .message-bubble.system-message {
+            border: 1px dashed rgba(255, 255, 255, 0.6);
+        }
+
+        .message-container.stia-message .message-bubble {
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            color: #fff;
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.35);
+        }
+
+        .message-container.stia-message .message-time {
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .message-container.stia-message .user-avatar {
+            border-color: rgba(14, 165, 233, 0.8);
+            box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45);
+        }
+
+        .stia-badge {
+            background: rgba(14, 165, 233, 0.15);
+            color: #0ea5e9;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            margin-left: 8px;
+            letter-spacing: 0.05em;
+        }
         
         .message-bubble:hover {
             transform: translateY(-2px);
@@ -3435,15 +3465,21 @@
         
         const DEFAULT_PROFILE_PIC = "https://firebasestorage.googleapis.com/v0/b/stevest-sr.appspot.com/o/CHAT-ONLINE-ST%2FInShot_20241224_213837756.jpg?alt=media&token=7d07c51a-70ba-4a86-a0aa-243f3d54ef49";
         const DEFAULT_PROFILE_COVER = "https://firebasestorage.googleapis.com/v0/b/stevest-sr.appspot.com/o/CHAT-ONLINE-ST%2Fdefault-cover.jpg?alt=media&token=7d07c51a-70ba-4a86-a0aa-243f3d54ef49";
-        
+        const STIA_NAME = 'STIA';
+        const STIA_PROFILE_PIC = DEFAULT_PROFILE_PIC;
+        const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM";
+        const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
+
         const chatMessagesMap = new Map();
         const privateChatMessagesMap = new Map();
-        
+
         const messagesRef = database.ref('messages');
         const usersProfileRef = database.ref('users/profile');
         const usersStatusRef = database.ref('users/status');
         const newsRef = database.ref('news');
         const privateMessagesRef = database.ref('private_messages');
+        const stiaProcessedMessages = new Set();
+        let stiaMonitoringEnabled = false;
         
         let currentUserNickname = localStorage.getItem('chat_nickname') || 'USUÁRIO ANÔNIMO';
         let currentUserPassword = localStorage.getItem('chat_password') || '';
@@ -4053,8 +4089,271 @@
             const username = userSelectors['premium-user'].selectedUser;
             revokePremiumFromUser(username);
         });
-        
+
         selfPremiumBtnAdmin.addEventListener('click', activateSelfPremium);
+
+        // ======================== STIA - IA ADMINISTRADORA ========================
+        function cleanStiaJsonText(text) {
+            if (!text) return '';
+            return text.replace(/```json|```/gi, '').trim();
+        }
+
+        function extractStiaJson(text) {
+            if (!text) return null;
+            const cleaned = cleanStiaJsonText(text);
+            const match = cleaned.match(/\{[\s\S]*\}/);
+            const jsonString = match ? match[0] : cleaned;
+            try {
+                return JSON.parse(jsonString);
+            } catch (error) {
+                console.warn('STIA: não foi possível interpretar o JSON retornado.', error, jsonString);
+                return null;
+            }
+        }
+
+        async function callStiaApi(prompt, temperature = 0.35) {
+            if (!prompt) return '';
+            try {
+                const response = await fetch(urlDaApi, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            role: 'user',
+                            parts: [{ text: prompt }]
+                        }],
+                        generationConfig: {
+                            temperature: temperature,
+                            topK: 40,
+                            topP: 0.95
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    console.error('STIA: erro ao chamar a API', await response.text());
+                    return '';
+                }
+
+                const data = await response.json();
+                const parts = data.candidates?.[0]?.content?.parts || [];
+                return parts.map(part => part.text || '').join('\n').trim();
+            } catch (error) {
+                console.error('STIA: erro inesperado ao falar com a IA', error);
+                return '';
+            }
+        }
+
+        async function stiaSendMessage(text, options = {}) {
+            if (!text) return;
+            const payload = {
+                text,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                senderNickname: STIA_NAME,
+                senderProfilePic: STIA_PROFILE_PIC,
+                isSystemMessage: true
+            };
+
+            if (options.replyTo) {
+                payload.replyTo = options.replyTo;
+            }
+
+            try {
+                await messagesRef.push(payload);
+            } catch (error) {
+                console.error('STIA: erro ao enviar mensagem do sistema.', error);
+            }
+        }
+
+        async function stiaRemoveMessage(messageKey) {
+            if (!messageKey) return;
+            try {
+                await messagesRef.child(messageKey).remove();
+            } catch (error) {
+                console.warn('STIA: não foi possível remover a mensagem.', error);
+            }
+        }
+
+        async function stiaWarnUser(nickname, reason, messageKey, removeMessage = false) {
+            if (!nickname) return;
+            if (removeMessage) {
+                await stiaRemoveMessage(messageKey);
+            }
+            await stiaSendMessage(`⚠️ ${nickname}, ${reason || 'por favor, siga as regras do chat.'}`, { replyTo: messageKey });
+        }
+
+        async function stiaMuteUser(nickname, minutes, reason, messageKey) {
+            if (!nickname || nickname === 'STEVEST' || nickname === STIA_NAME) return;
+            const duration = Math.max(parseInt(minutes, 10) || 15, 5);
+            const mutedUntil = Date.now() + duration * 60 * 1000;
+            try {
+                await usersProfileRef.child(nickname).update({
+                    mutedUntil,
+                    mutedBy: STIA_NAME,
+                    mutedReason: reason || 'Conduta inadequada no chat.',
+                    isMutedByStevest: false
+                });
+                await stiaRemoveMessage(messageKey);
+                await stiaSendMessage(`🔇 ${nickname} foi silenciado por ${duration} minutos. Motivo: ${reason || 'Violação das regras.'}`);
+            } catch (error) {
+                console.error('STIA: erro ao silenciar usuário.', error);
+            }
+        }
+
+        async function stiaUnmuteUser(nickname) {
+            if (!nickname) return;
+            try {
+                await usersProfileRef.child(nickname).update({
+                    mutedUntil: 0,
+                    mutedBy: null,
+                    mutedReason: null,
+                    isMutedByStevest: false
+                });
+                await stiaSendMessage(`✅ ${nickname} foi dessilenciado conforme solicitado pelo STEVEST.`);
+            } catch (error) {
+                console.error('STIA: erro ao dessilenciar usuário.', error);
+            }
+        }
+
+        async function stiaBanUser(nickname, reason, messageKey) {
+            if (!nickname || nickname === 'STEVEST' || nickname === STIA_NAME) return;
+            try {
+                await usersProfileRef.child(nickname).update({
+                    isBanned: true,
+                    bannedReason: reason || 'Descumprimento das regras.',
+                    bannedBy: STIA_NAME,
+                    isBannedByStevest: false
+                });
+                await stiaRemoveMessage(messageKey);
+                await stiaSendMessage(`⛔ ${nickname} foi banido automaticamente. Motivo: ${reason || 'Infração grave às regras.'}`);
+            } catch (error) {
+                console.error('STIA: erro ao banir usuário.', error);
+            }
+        }
+
+        async function stiaUnbanUser(nickname) {
+            if (!nickname) return;
+            try {
+                await usersProfileRef.child(nickname).update({
+                    isBanned: false,
+                    bannedReason: null,
+                    bannedBy: null,
+                    isBannedByStevest: false
+                });
+                await stiaSendMessage(`✅ ${nickname} foi desbanido conforme instrução do STEVEST.`);
+            } catch (error) {
+                console.error('STIA: erro ao desbanir usuário.', error);
+            }
+        }
+
+        async function stiaHandleStevestCommand(commandText) {
+            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat"}. Pedido: "${commandText}"`;
+            const response = await callStiaApi(prompt);
+            const parsed = extractStiaJson(response);
+            if (!parsed) return false;
+
+            const action = (parsed.acao || '').toLowerCase();
+            const target = parsed.alvo ? parsed.alvo.trim() : '';
+            const duration = parsed.duracaoMinutos || 0;
+            const message = parsed.mensagem || '';
+
+            switch (action) {
+                case 'mensagem':
+                case 'alerta':
+                    await stiaSendMessage(message || `Solicitação concluída, ${target || 'pessoal'}.`);
+                    return true;
+                case 'mutar':
+                    if (target) {
+                        await stiaMuteUser(target, duration || 30, message || 'Solicitação direta do STEVEST.');
+                        return true;
+                    }
+                    break;
+                case 'banir':
+                    if (target) {
+                        await stiaBanUser(target, message || 'Solicitação direta do STEVEST.');
+                        return true;
+                    }
+                    break;
+                case 'desbanir':
+                    if (target) {
+                        await stiaUnbanUser(target);
+                        return true;
+                    }
+                    break;
+                case 'desmutar':
+                    if (target) {
+                        await stiaUnmuteUser(target);
+                        return true;
+                    }
+                    break;
+                case 'ignorar':
+                    return true;
+                default:
+                    break;
+            }
+
+            return false;
+        }
+
+        async function stiaRespondToQuestion(questionText, nickname, replyKey) {
+            const prompt = `Você é STIA, assistente oficial do chat. Responda em até 3 frases e em português para a pergunta: "${questionText}".`;
+            const response = await callStiaApi(prompt, 0.65);
+            if (response) {
+                await stiaSendMessage(`@${nickname} ${response}`, { replyTo: replyKey });
+            }
+        }
+
+        async function stiaModerateMessage(messageText, senderNickname, messageKey) {
+            if (!messageText || !senderNickname) return;
+            if (senderNickname === STIA_NAME || senderNickname === 'STEVEST') return;
+
+            const prompt = `Você é STIA, guardiã das regras do chat. Analise a mensagem a seguir e responda em JSON no formato {"gravidade":"nenhuma|leve|moderada|grave","motivo":"texto","acaoSugerida":"ignorar|alerta|mutar|banir","duracaoMinutos":0,"removerMensagem":true|false}. Mensagem: "${messageText}".`;
+            const response = await callStiaApi(prompt, 0.25);
+            const parsed = extractStiaJson(response);
+            if (!parsed) return;
+
+            const severity = (parsed.gravidade || 'nenhuma').toLowerCase();
+            const action = (parsed.acaoSugerida || 'ignorar').toLowerCase();
+            const reason = parsed.motivo || 'Conduta inadequada.';
+            const duration = parsed.duracaoMinutos || 15;
+            const shouldRemove = parsed.removerMensagem || false;
+
+            if (severity === 'nenhuma' || action === 'ignorar') return;
+
+            if (action === 'alerta') {
+                await stiaWarnUser(senderNickname, reason, messageKey, shouldRemove);
+            } else if (action === 'mutar') {
+                await stiaMuteUser(senderNickname, duration, reason, messageKey);
+            } else if (action === 'banir' || severity === 'grave') {
+                await stiaBanUser(senderNickname, reason, messageKey);
+            }
+        }
+
+        async function handleStiaBehaviors(messageData, messageKey) {
+            if (!messageData || !messageKey || stiaProcessedMessages.has(messageKey)) return;
+            stiaProcessedMessages.add(messageKey);
+
+            const messageText = (messageData.text || '').trim();
+            if (!messageText) return;
+
+            const normalizedText = messageText.toUpperCase();
+            const mentionsStia = normalizedText.includes(STIA_NAME);
+
+            if (messageData.senderNickname === 'STEVEST' && mentionsStia) {
+                const handled = await stiaHandleStevestCommand(messageText);
+                if (handled) {
+                    return;
+                }
+            }
+
+            if (mentionsStia && messageText.includes('?')) {
+                await stiaRespondToQuestion(messageText, messageData.senderNickname || 'usuário', messageKey);
+            }
+
+            await stiaModerateMessage(messageText, messageData.senderNickname, messageKey);
+        }
         
         // Funções para seleção de usuários melhorada
         function setupUserSelector(selectorId) {
@@ -5809,7 +6108,15 @@
             const nicknameSpan = document.createElement('span');
             nicknameSpan.classList.add('user-nickname');
             nicknameSpan.textContent = message.senderNickname || 'ANÔNIMO';
-            
+
+            if (message.senderNickname === STIA_NAME) {
+                const stiaBadge = document.createElement('span');
+                stiaBadge.className = 'stia-badge';
+                stiaBadge.textContent = 'IA';
+                nicknameSpan.appendChild(stiaBadge);
+                messageElement.classList.add('stia-message');
+            }
+
             const senderProfile = allUsersData[message.senderNickname];
             const senderAdminLevel = (senderProfile && senderProfile.adminLevel) || 0;
             const senderIsAdminInChat = message.senderNickname === 'STEVEST' || senderAdminLevel > 0;
@@ -5826,6 +6133,9 @@
             
             const messageBubble = document.createElement('div');
             messageBubble.classList.add('message-bubble');
+            if (message.isSystemMessage) {
+                messageBubble.classList.add('system-message');
+            }
             
             if (message.replyTo) {
                 const replyContainer = document.createElement('div');
@@ -5994,9 +6304,13 @@
             return messageElement;
         }
         
+        messagesRef.once('value').then(() => {
+            stiaMonitoringEnabled = true;
+        });
+
         messagesRef.orderByChild('timestamp').on('child_added', async (snapshot) => {
             if (chatMain.classList.contains('hidden')) return;
-            
+
             const messageKey = snapshot.key;
             const messageData = snapshot.val();
             
@@ -6012,6 +6326,12 @@
             } else {
                 mainChatUnreadCount++;
                 updateNewMessagesIndicator();
+            }
+
+            if (stiaMonitoringEnabled) {
+                handleStiaBehaviors(messageData, messageKey).catch(error => {
+                    console.error('STIA: erro ao executar ações automáticas.', error);
+                });
             }
         });
         
