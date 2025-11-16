@@ -1496,10 +1496,16 @@
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
             transition: all 0.2s ease;
         }
-        
+
         .profile-cover-upload-button:hover {
             transform: scale(1.1);
             box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .profile-cover-upload-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
         }
         
         .profile-avatar-container {
@@ -1547,6 +1553,12 @@
         .profile-upload-button:hover {
             transform: scale(1.1);
             box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+        }
+
+        .profile-upload-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
         }
         
         .profile-form-group {
@@ -2940,7 +2952,7 @@
                         <div class="profile-cover-container">
                             <div id="profile-cover" class="profile-cover-img"></div>
                             <input type="file" id="profile-cover-upload" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('profile-cover-upload').click()" class="profile-cover-upload-button">
+                            <button id="profile-cover-photo-button" onclick="document.getElementById('profile-cover-upload').click()" class="profile-cover-upload-button">
                                 <i class="fas fa-camera text-lg"></i>
                             </button>
                             <button id="profile-cover-gif-button" class="profile-cover-upload-button" style="bottom: 60px;">
@@ -2950,7 +2962,7 @@
                         <div class="profile-avatar-container">
                             <div id="profile-pic" class="profile-avatar-img"></div>
                             <input type="file" id="profile-upload" class="hidden" accept="image/*">
-                            <button onclick="document.getElementById('profile-upload').click()" class="profile-upload-button">
+                            <button id="profile-photo-button" onclick="document.getElementById('profile-upload').click()" class="profile-upload-button">
                                 <i class="fas fa-camera text-lg"></i>
                             </button>
                             <button id="profile-gif-button" class="profile-upload-button" style="bottom: 60px;">
@@ -3469,6 +3481,7 @@
         const STIA_PROFILE_PIC = DEFAULT_PROFILE_PIC;
         const STIA_PROTECTED_OWNER = 'STEVEST';
         const STIA_DEFAULT_PRIVATE_PARTNER = 'STEVEST';
+        const STIA_ADMIN_PUNISHMENT_PATTERN = /(BAN|MUT|SILEN|PUNI|DESBAN|DESMUT|ALERTA|AVIS|EXPUL)/i;
         const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM";
         const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
 
@@ -3494,8 +3507,10 @@
         let currentUserIsPremium = false; // Status Premium do usuário atual
         let currentUserPremiumExpiry = null; // Data de expiração do Premium
         let rememberMeState = false; // Estado da caixa "Lembrar de mim"
-        
-        const userProfilesCache = {}; 
+        let stiaStevestProfilePhotoUnlocked = false;
+        let stiaStevestProfileCoverUnlocked = false;
+
+        const userProfilesCache = {};
         let allUsersData = {};
         let onlineUsers = new Set();
         
@@ -3522,6 +3537,8 @@
         const profileCover = document.getElementById('profile-cover');
         const profileUpload = document.getElementById('profile-upload');
         const profileCoverUpload = document.getElementById('profile-cover-upload');
+        const profilePhotoButton = document.getElementById('profile-photo-button');
+        const profileCoverPhotoButton = document.getElementById('profile-cover-photo-button');
         const nicknameInput = document.getElementById('nickname');
         const passwordInput = document.getElementById('password');
         const rememberMeCheckbox = document.getElementById('remember-me');
@@ -3543,6 +3560,31 @@
         const visitProfileChatButton = document.getElementById('visit-profile-chat-button');
         const visitProfileBackButton = document.getElementById('visit-profile-back-button');
         let currentVisitProfileUser = null;
+
+        function updateStevestProfileButtonState() {
+            const isStevest = currentUserNickname === STIA_PROTECTED_OWNER;
+            const lockPhoto = isStevest && !stiaStevestProfilePhotoUnlocked;
+            const lockCover = isStevest && !stiaStevestProfileCoverUnlocked;
+
+            if (profileUpload) {
+                profileUpload.disabled = lockPhoto;
+            }
+            if (profilePhotoButton) {
+                profilePhotoButton.disabled = lockPhoto;
+            }
+            if (profileCoverUpload) {
+                profileCoverUpload.disabled = lockCover;
+            }
+            if (profileCoverPhotoButton) {
+                profileCoverPhotoButton.disabled = lockCover;
+            }
+        }
+
+        function resetStevestProfileButtonUnlocks() {
+            stiaStevestProfilePhotoUnlocked = false;
+            stiaStevestProfileCoverUnlocked = false;
+            updateStevestProfileButtonState();
+        }
         
         const chatMain = document.getElementById('main-chat');
         
@@ -4181,6 +4223,29 @@
             }
         }
 
+        async function stiaSendPrivateMessage(targetNickname, text, options = {}) {
+            if (!targetNickname || !text) return;
+            const payload = {
+                text,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                senderNickname: STIA_NAME,
+                senderProfilePic: STIA_PROFILE_PIC,
+                receiverNickname: targetNickname,
+                isSystemMessage: true
+            };
+
+            if (options.replyTo) {
+                payload.replyTo = options.replyTo;
+            }
+
+            try {
+                const chatKey = getPrivateChatKey(STIA_NAME, targetNickname);
+                await privateMessagesRef.child(chatKey).push(payload);
+            } catch (error) {
+                console.error('STIA: erro ao responder no privado.', error);
+            }
+        }
+
         async function stiaDemoteAdminForStevestAttempt(adminNickname, attemptedAction) {
             if (!adminNickname || adminNickname === STIA_PROTECTED_OWNER || adminNickname === STIA_NAME) return;
             const adminData = allUsersData[adminNickname];
@@ -4216,6 +4281,41 @@
                 await stiaSendMessage(`⚡ ${adminNickname} foi rebaixado por tentar ${attemptedAction} o ${STIA_PROTECTED_OWNER}. Agora está em ${levelText}.`);
             } catch (error) {
                 console.error('STIA: erro ao rebaixar admin abusivo.', error);
+            }
+        }
+
+        async function stiaUnlockStevestProfileButtons(uploadType = 'ambos', confirmationMessage = '') {
+            const normalizedType = (uploadType || 'ambos').toLowerCase();
+            const unlockPhoto = ['perfil', 'avatar', 'foto', 'foto_perfil'].includes(normalizedType);
+            const unlockCover = ['capa', 'cover'].includes(normalizedType);
+            const unlockBoth = normalizedType === 'ambos' || normalizedType === 'todos' || normalizedType === 'all' || normalizedType === 'both' || normalizedType === '' || normalizedType === 'perfil_capa';
+
+            if (unlockPhoto || unlockBoth) {
+                stiaStevestProfilePhotoUnlocked = true;
+            }
+            if (unlockCover || unlockBoth) {
+                stiaStevestProfileCoverUnlocked = true;
+            }
+
+            if (!unlockPhoto && !unlockCover && !unlockBoth) {
+                stiaStevestProfilePhotoUnlocked = true;
+                stiaStevestProfileCoverUnlocked = true;
+            }
+
+            updateStevestProfileButtonState();
+
+            const photoEnabled = stiaStevestProfilePhotoUnlocked;
+            const coverEnabled = stiaStevestProfileCoverUnlocked;
+            let unlockedLabel = 'os botões de foto e capa';
+            if (photoEnabled && !coverEnabled) {
+                unlockedLabel = 'o botão de foto de perfil';
+            } else if (!photoEnabled && coverEnabled) {
+                unlockedLabel = 'o botão da capa do perfil';
+            }
+
+            const finalMessage = confirmationMessage || `🖼️ STIA liberou ${unlockedLabel} para o ${STIA_PROTECTED_OWNER}.`;
+            if (finalMessage) {
+                await stiaSendMessage(finalMessage);
             }
         }
 
@@ -4454,7 +4554,7 @@
         }
 
         async function stiaHandleStevestCommand(commandText) {
-            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|deletar_perfil|limpar_mensagens|gerenciar_admin|premium|acesso_privado|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat","nivelAdmin":0,"premiumDias":0,"tipoPremium":"conceder|revogar|ilimitado","chatParceiro":"SEGUNDO USUÁRIO OU VAZIO"}. Pedido: "${commandText}"`;
+            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|deletar_perfil|limpar_mensagens|gerenciar_admin|premium|acesso_privado|liberar_upload|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat","nivelAdmin":0,"premiumDias":0,"tipoPremium":"conceder|revogar|ilimitado","chatParceiro":"SEGUNDO USUÁRIO OU VAZIO","tipoUpload":"perfil|capa|ambos"}. Pedido: "${commandText}"`;
             const response = await callStiaApi(prompt);
             const parsed = extractStiaJson(response);
             if (!parsed) return false;
@@ -4468,6 +4568,7 @@
             const premiumDias = parsed.premiumDias ?? parsed.diasPremium ?? 0;
             const tipoPremium = (parsed.tipoPremium || parsed.acaoPremium || '').toLowerCase();
             const chatPartner = parsed.chatParceiro || parsed.parceiro || parsed.segundoAlvo || '';
+            const uploadType = (parsed.tipoUpload || parsed.uploadTipo || parsed.botao || '').toLowerCase();
 
             switch (actionRaw) {
                 case 'mensagem':
@@ -4548,6 +4649,9 @@
                         return true;
                     }
                     break;
+                case 'liberar_upload':
+                    await stiaUnlockStevestProfileButtons(uploadType || 'ambos', message);
+                    return true;
                 case 'ignorar':
                     return true;
                 default:
@@ -4610,6 +4714,17 @@
             }
         }
 
+        async function stiaChatPrivatelyWithUser(nickname, userMessage, replyKey) {
+            if (!nickname) return;
+            const content = (userMessage || '').trim() || 'mensagem vazia';
+            const truncatedContent = content.length > 400 ? `${content.slice(0, 400)}...` : content;
+            const prompt = `Você é STIA, assistente oficial do chat, conversando no privado com ${nickname}. O usuário enviou: "${truncatedContent}". Responda em português, com até 3 frases e mantendo um tom cordial.`;
+            const response = await callStiaApi(prompt, 0.7);
+            if (response) {
+                await stiaSendPrivateMessage(nickname, response, { replyTo: replyKey });
+            }
+        }
+
         async function stiaModerateMessage(messageText, senderNickname, messageKey) {
             if (!messageText || !senderNickname) return;
             if (senderNickname === STIA_NAME) return;
@@ -4647,6 +4762,37 @@
             }
         }
 
+        async function stiaHandlePrivateUserMessage(messageData, messageKey) {
+            if (!messageData) return;
+            const sender = messageData.senderNickname || '';
+            const receiver = messageData.receiverNickname || '';
+            if (!sender || receiver !== STIA_NAME || sender === STIA_NAME) return;
+
+            const messageText = (messageData.text || '').trim();
+            const adminLevel = getUserAdminLevel(sender);
+            const fallbackContent = messageText || (messageData.mediaType ? `[${(messageData.mediaType || '').toUpperCase()}]` : 'mensagem vazia');
+
+            try {
+                if (sender === STIA_PROTECTED_OWNER && messageText) {
+                    const handled = await stiaHandleStevestCommand(messageText);
+                    if (handled) {
+                        await stiaSendPrivateMessage(sender, '✅ Pedido processado no privado.', { replyTo: messageKey });
+                        return;
+                    }
+                } else if (adminLevel > 0 && messageText && STIA_ADMIN_PUNISHMENT_PATTERN.test(messageText)) {
+                    const handled = await stiaHandleAdminPunishmentCommand(messageText, sender, adminLevel);
+                    if (handled) {
+                        await stiaSendPrivateMessage(sender, '✅ Solicitação aplicada no privado.', { replyTo: messageKey });
+                        return;
+                    }
+                }
+
+                await stiaChatPrivatelyWithUser(sender, fallbackContent, messageKey);
+            } catch (error) {
+                console.error('STIA: erro ao responder mensagem privada.', error);
+            }
+        }
+
         function getUserAdminLevel(nickname) {
             if (!nickname) return 0;
             const userData = allUsersData[nickname];
@@ -4673,7 +4819,6 @@
 
             const normalizedText = messageText.toUpperCase();
             const mentionsStia = normalizedText.includes(STIA_NAME);
-            const adminPunishmentPattern = /(BAN|MUT|SILEN|PUNI|DESBAN|DESMUT|ALERTA|AVIS|EXPUL)/;
             const senderNickname = messageData.senderNickname || '';
             const inlineAdminLevel = typeof messageData.senderAdminLevel === 'number' ? messageData.senderAdminLevel : 0;
             const senderAdminLevel = getUserAdminLevel(senderNickname) || inlineAdminLevel;
@@ -4683,7 +4828,7 @@
                 if (handled) {
                     return;
                 }
-            } else if (mentionsStia && senderAdminLevel > 0 && adminPunishmentPattern.test(normalizedText)) {
+            } else if (mentionsStia && senderAdminLevel > 0 && STIA_ADMIN_PUNISHMENT_PATTERN.test(messageText)) {
                 const handled = await stiaHandleAdminPunishmentCommand(messageText, senderNickname, senderAdminLevel);
                 if (handled) {
                     return;
@@ -6181,12 +6326,12 @@
                     hideUploadProgressModal();
                 }, 
                 () => {
-                    uploadTask.snapshot.ref.getDownloadURL().then((downloadURL) => {
+                    uploadTask.snapshot.ref.getDownloadURL().then(async (downloadURL) => {
                         const messageData = {
                             mediaUrl: downloadURL,
                             mediaType: mediaType,
-                            text: messageInputElement.value.trim() || '', 
-                            timestamp: firebase.database.ServerValue.TIMESTAMP, 
+                            text: messageInputElement.value.trim() || '',
+                            timestamp: firebase.database.ServerValue.TIMESTAMP,
                             senderNickname: currentUserNickname,
                             senderProfilePic: currentUserProfilePic,
                             senderIsAdmin: currentUserIsAdmin
@@ -6200,12 +6345,23 @@
                             messageData.receiverNickname = targetUser;
                             messageData.replyTo = privateReplyingToMessage;
                             const chatKey = getPrivateChatKey(currentUserNickname, targetUser);
-                            privateMessagesRef.child(chatKey).push(messageData);
+                            const newMessageRef = privateMessagesRef.child(chatKey).push();
+                            await newMessageRef.set(messageData);
+                            if (targetUser === STIA_NAME) {
+                                const payloadForStia = { ...messageData };
+                                if (!payloadForStia.text) {
+                                    payloadForStia.text = mediaType === 'image' ? '[IMAGEM]' : mediaType === 'video' ? '[VÍDEO]' : '[MÍDIA]';
+                                }
+                                payloadForStia.timestamp = Date.now();
+                                stiaHandlePrivateUserMessage(payloadForStia, newMessageRef.key).catch(error => {
+                                    console.error('STIA: erro ao processar mídia privada.', error);
+                                });
+                            }
                             cancelPrivateReply();
                         }
-                        
-                        messageInputElement.value = ''; 
-                        inputElement.value = ''; 
+
+                        messageInputElement.value = '';
+                        inputElement.value = '';
                         hideUploadProgressModal();
                     });
                 }
@@ -6252,10 +6408,21 @@
                     messageData.receiverNickname = targetUser;
                     messageData.replyTo = privateReplyingToMessage;
                     const chatKey = getPrivateChatKey(currentUserNickname, targetUser);
-                    privateMessagesRef.child(chatKey).push(messageData);
+                    const newMessageRef = privateMessagesRef.child(chatKey).push();
+                    await newMessageRef.set(messageData);
+                    if (targetUser === STIA_NAME) {
+                        const payloadForStia = { ...messageData };
+                        if (!payloadForStia.text) {
+                            payloadForStia.text = messageData.mediaType ? `[${(messageData.mediaType || '').toUpperCase()}]` : '';
+                        }
+                        payloadForStia.timestamp = Date.now();
+                        stiaHandlePrivateUserMessage(payloadForStia, newMessageRef.key).catch(error => {
+                            console.error('STIA: erro ao processar mensagem privada.', error);
+                        });
+                    }
                     cancelPrivateReply();
                 }
-                
+
                 messageInputElement.value = '';
             }
         }
@@ -6897,6 +7064,8 @@
                 rememberMeCheckbox.checked = false;
                 rememberMeState = false;
             }
+
+            updateStevestProfileButtonState();
         }
         
         // Função para carregar o estado da caixa "Lembrar de mim" do Firebase
@@ -7158,7 +7327,8 @@
                     isPrivateMessagesLocked = userData.privateMessagesLocked !== false; // Por padrão é true (bloqueado)
                     currentUserIsPremium = userData.isPremium || false;
                     currentUserPremiumExpiry = userData.premiumExpiry || null;
-                    
+                    resetStevestProfileButtonUnlocks();
+
                     // Verificar se o Premium expirou
                     if (currentUserIsPremium && currentUserPremiumExpiry) {
                         const now = Date.now();
@@ -7229,10 +7399,11 @@
                     currentUserProfilePic = DEFAULT_PROFILE_PIC;
                     currentUserProfileCover = DEFAULT_PROFILE_COVER;
                     currentUserIsAdmin = false; 
-                    currentUserAdminLevel = 0; 
+                    currentUserAdminLevel = 0;
                     isPrivateMessagesLocked = true; // Por padrão, mensagens privadas são bloqueadas
                     currentUserIsPremium = false;
                     currentUserPremiumExpiry = null;
+                    resetStevestProfileButtonUnlocks();
                     
                     // Salvar no localStorage se "Lembrar de mim" estiver marcado
                     if (rememberMe) {
@@ -7288,7 +7459,8 @@
                 currentUserIsPremium = false;
                 currentUserPremiumExpiry = null;
                 rememberMeState = false;
-                
+                resetStevestProfileButtonUnlocks();
+
                 await showAlertModal('DESCONECTADO', 'VOCÊ FOI DESCONECTADO.', 'fas fa-door-open', 'info');
                 updateProfileScreenUI();
                 updateMainUI();
