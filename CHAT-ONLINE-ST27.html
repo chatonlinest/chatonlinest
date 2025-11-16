@@ -1472,6 +1472,10 @@
             border: 1px solid rgba(99, 102, 241, 0.15);
         }
 
+        .stia-profile-card.stia-profile-highlight {
+            animation: highlightPulse 2s ease-out;
+        }
+
         .stia-profile-card-header {
             display: flex;
             align-items: center;
@@ -3110,6 +3114,9 @@
                         <button id="toggle-private-messages" class="profile-button profile-toggle-button">
                             <i class="fas fa-lock mr-2"></i>CHAT 🔒
                         </button>
+                        <button id="stia-profile-shortcut-button" class="profile-button hidden">
+                            <i class="fas fa-robot mr-2"></i>GERENCIAR PERFIL DA STIA
+                        </button>
                         <button id="logout-button" class="profile-button logout">
                             SAIR
                         </button>
@@ -3705,6 +3712,7 @@
         const logoutButton = document.getElementById('logout-button');
         const displayNickname = document.getElementById('display-nickname');
         const togglePrivateMessagesBtn = document.getElementById('toggle-private-messages');
+        const stiaProfileShortcutButton = document.getElementById('stia-profile-shortcut-button');
         
         // Botões para GIF
         const profileGifButton = document.getElementById('profile-gif-button');
@@ -3719,6 +3727,19 @@
         const visitProfileChatButton = document.getElementById('visit-profile-chat-button');
         const visitProfileBackButton = document.getElementById('visit-profile-back-button');
         let currentVisitProfileUser = null;
+
+        if (stiaProfileShortcutButton) {
+            stiaProfileShortcutButton.addEventListener('click', () => {
+                if (!stiaProfileEditorSection || stiaProfileEditorSection.classList.contains('hidden')) return;
+                stiaProfileEditorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                stiaProfileEditorSection.classList.remove('stia-profile-highlight');
+                void stiaProfileEditorSection.offsetWidth;
+                stiaProfileEditorSection.classList.add('stia-profile-highlight');
+                setTimeout(() => {
+                    stiaProfileEditorSection.classList.remove('stia-profile-highlight');
+                }, 2000);
+            });
+        }
 
         function updateStevestProfileButtonState() {
             const isStevest = currentUserNickname === STIA_PROTECTED_OWNER;
@@ -3782,6 +3803,9 @@
         function updateStiaProfileEditorUI() {
             if (!stiaProfileEditorSection) return;
             const isStevest = currentUserNickname === STIA_PROTECTED_OWNER;
+            if (stiaProfileShortcutButton) {
+                stiaProfileShortcutButton.classList.toggle('hidden', !isStevest);
+            }
             if (!isStevest) {
                 stiaProfileEditorSection.classList.add('hidden');
                 updateStiaProfileButtonState();
