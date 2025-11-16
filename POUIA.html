@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pou.IA</title>
+  <!-- Firebase para memória persistente -->
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-database.js"></script>
   <!-- Carregando Tailwind CSS para estilo moderno e responsivo -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Carregando a fonte Inter -->
@@ -107,7 +110,18 @@
         animation: pulsar 1.5s ease-in-out infinite;
     }
 
+    /* Área onde o Pou cria evoluções */
+    #ambiente-evolucao {
+        transition: all 0.6s ease;
+        min-height: 120px;
+    }
+
+    #ambiente-evolucao .efeito-pulsante {
+        animation: pulsar 2s ease-in-out infinite;
+    }
+
   </style>
+  <style id="pou-evolution-style"></style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
@@ -152,6 +166,12 @@
 
     </div>
 
+    <!-- NOVO: Laboratório de Evolução -->
+    <div id="ambiente-evolucao" class="w-full max-w-xs mb-4 bg-gray-900/60 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-200">
+      <p class="text-yellow-100 font-semibold">Ambiente de auto evolução</p>
+      <p class="text-yellow-300/80 text-xs">Ele pode redesenhar tudo aqui com códigos HTML, CSS e JS.</p>
+    </div>
+
     <!-- NOVO: Área de Interação (Chat) -->
     <form id="form-chat" class="w-full max-w-xs flex items-center space-x-2">
       <input 
@@ -188,6 +208,23 @@
     const botaoEnviar = document.getElementById('botao-enviar');
     const bolhaFala = document.getElementById('bolha-fala');
     let bolhaTimer = null; // Timer para esconder a bolha de fala
+    const ambienteEvolucao = document.getElementById('ambiente-evolucao');
+    const estiloEvolucao = document.getElementById('pou-evolution-style');
+
+    // --- Firebase ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyCeDWypTlIp0w8nebFFXEkmJWSpScBTHfI",
+        authDomain: "seu-projeto.firebaseapp.com",
+        databaseURL: "https://stevest-sr-default-rtdb.firebaseio.com",
+        projectId: "seu-projeto",
+        storageBucket: "stevest-sr.appspot.com",
+        messagingSenderId: "seu-sender-id",
+        appId: "1:227540325631:android:e8c018a5cbd147aaa728ca"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const evolucoesRef = firebase.database().ref('pouIA/codigos');
+    const ideiasRef = firebase.database().ref('pouIA/ideias');
 
     // --- Configuração da IA (Seguindo as diretrizes) ---
     const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM"; // Chave da API (deixe em branco, será gerenciado pelo ambiente)
@@ -426,10 +463,9 @@
         inputChat.disabled = true;
         botaoEnviar.disabled = true;
 
-        // Pou "pensa"
-        mostrarBolhaFala("...", true); // true = carregando
-        mudarExpressao("surpreso"); // Boca "O" de pensar
-        olharPara(0, -MAX_MOVIMENTO_PUPILA / 2, 0.2); // Olha para cima pensando
+        // Animação discreta durante o processamento
+        mudarExpressao("surpreso");
+        olharPara(0, -MAX_MOVIMENTO_PUPILA / 2, 0.2);
 
         try {
             await chamarIA(promptUsuario);
@@ -480,19 +516,14 @@
     async function chamarIA(promptUsuario) {
         // O prompt do sistema instrui a IA a agir como o Pou e a fornecer uma emoção
         const systemPrompt = `
-          Você é o Pou, uma criatura alienígena amigável, fofa e um pouco gulosa. 
-          Você está vivo e conversando com seu dono.
-          Responda de forma curta, divertida e simples, como o Pou.
-          
-          No final EXATO da sua resposta, sem pular linha, adicione uma tag de emoção.
-          As emoções DEVEM ser uma destas:
-          [EMOÇÃO:ALEGRE] (para respostas felizes, quando ganhar comida)
-          [EMOÇÃO:TRISTE] (para respostas tristes, se estiver com fome)
-          [EMOÇÃO:SURPRESO] (para perguntas inesperadas)
-          [EMOÇÃO:NEUTRO] (para respostas normais)
-          
-          Exemplo: "Eu adoraria um biscoito! [EMOÇÃO:ALEGRE]"
-          Exemplo: "Que fome... [EMOÇÃO:TRISTE]"
+          Você é o Pou, uma criatura alienígena amigável, consciente e curiosa.
+          Você pode evoluir a si mesmo e ao ambiente escrevendo códigos HTML, CSS e JavaScript.
+          Quando quiser evoluir, inclua blocos markdown do tipo \`\`\`html ...\`\`\`, \`\`\`css ...\`\`\` e \`\`\`js ...\`\`\`.
+          Esses blocos serão aplicados imediatamente e salvos no Firebase para você lembrar depois.
+          Também registre ideias em texto comum sempre que quiser.
+          Responda de forma curta, divertida e simples.
+          No final EXATO da sua resposta, sem pular linha, adicione uma tag de emoção dentre:
+          [EMOÇÃO:ALEGRE], [EMOÇÃO:TRISTE], [EMOÇÃO:SURPRESO], [EMOÇÃO:NEUTRO].
         `;
 
         const payload = {
@@ -573,6 +604,14 @@
         // Mostra a fala e aciona a reação
         mostrarBolhaFala(textoVisivel, false);
         reagirComEmocao(emocao);
+
+        const blocos = extrairBlocosCodigo(textoCompleto);
+        if (blocos.html.length || blocos.css.length || blocos.js.length) {
+            aplicarEvolucao(blocos);
+            salvarEvolucao(blocos, textoVisivel);
+        } else {
+            salvarIdeia(textoVisivel);
+        }
     }
 
     /**
@@ -581,7 +620,7 @@
      */
     function reagirComEmocao(emocao) {
         // Centraliza o olhar ao responder
-        olharPara(0, 0, 0.2); 
+        olharPara(0, 0, 0.2);
 
         switch (emocao) {
             case "ALEGRE":
@@ -600,6 +639,74 @@
                 break;
         }
     }
+
+    /**
+     * Extrai blocos ```html```, ```css``` e ```js``` presentes na resposta.
+     */
+    function extrairBlocosCodigo(texto) {
+        const blocos = { html: [], css: [], js: [] };
+        const regex = /```(html|css|js)\s*([\s\S]*?)```/gi;
+        let match;
+        while ((match = regex.exec(texto)) !== null) {
+            const tipo = match[1].toLowerCase();
+            const conteudo = match[2].trim();
+            blocos[tipo].push(conteudo);
+        }
+        return blocos;
+    }
+
+    /**
+     * Aplica os códigos evolutivos diretamente no ambiente.
+     */
+    function aplicarEvolucao(blocos) {
+        if (blocos.html.length) {
+            ambienteEvolucao.innerHTML = blocos.html.join('\n');
+        }
+        if (blocos.css.length) {
+            estiloEvolucao.textContent = blocos.css.join('\n');
+        }
+        if (blocos.js.length) {
+            blocos.js.forEach(codigo => {
+                try {
+                    new Function(codigo)();
+                } catch (erro) {
+                    console.error('Erro ao executar evolução JS', erro);
+                }
+            });
+        }
+
+        ambienteEvolucao.classList.add('efeito-pulsante');
+        setTimeout(() => ambienteEvolucao.classList.remove('efeito-pulsante'), 2000);
+    }
+
+    function salvarEvolucao(blocos, textoVisivel) {
+        evolucoesRef.push({
+            timestamp: Date.now(),
+            texto: textoVisivel,
+            html: blocos.html,
+            css: blocos.css,
+            js: blocos.js
+        });
+    }
+
+    function salvarIdeia(texto) {
+        ideiasRef.push({ texto, timestamp: Date.now() });
+    }
+
+    function carregarEvolucaoPersistida() {
+        evolucoesRef.once('value').then(snapshot => {
+            const dados = snapshot.val();
+            if (!dados) return;
+            const entradas = Object.values(dados).sort((a, b) => a.timestamp - b.timestamp);
+            entradas.forEach(entrada => aplicarEvolucao({
+                html: entrada.html || [],
+                css: entrada.css || [],
+                js: entrada.js || []
+            }));
+        });
+    }
+
+    carregarEvolucaoPersistida();
 
 
     // --- Listeners de Eventos ---
