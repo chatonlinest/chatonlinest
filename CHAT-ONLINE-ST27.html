@@ -1460,6 +1460,127 @@
             align-items: center;
             justify-content: center;
         }
+
+        .stia-profile-card {
+            width: 100%;
+            max-width: 640px;
+            margin-top: 32px;
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 15px 35px rgba(15, 23, 42, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+        }
+
+        .stia-profile-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .stia-profile-card-header h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #111827;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stia-profile-description {
+            margin: 0;
+            color: #4b5563;
+            font-size: 0.95rem;
+        }
+
+        .stia-profile-chip {
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+            color: white;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .stia-profile-assets {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .stia-profile-cover-container {
+            position: relative;
+            width: 100%;
+            height: 160px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+        }
+
+        .stia-profile-cover-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+        }
+
+        .stia-profile-avatar-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+        }
+
+        .stia-profile-avatar-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 999px;
+            border: 4px solid rgba(99, 102, 241, 0.4);
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 42px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .stia-profile-identity {
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-top: 16px;
+        }
+
+        .stia-profile-lock-alert {
+            margin-top: 12px;
+            font-size: 0.9rem;
+            text-align: center;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px dashed rgba(99, 102, 241, 0.4);
+            color: #4338ca;
+            background: rgba(59, 130, 246, 0.08);
+        }
+
+        .stia-profile-lock-alert.locked {
+            color: #b91c1c;
+            border-color: rgba(220, 38, 38, 0.4);
+            background: rgba(248, 113, 113, 0.15);
+        }
+
+        .stia-profile-lock-alert.unlocked {
+            color: #065f46;
+            border-color: rgba(16, 185, 129, 0.4);
+            background: rgba(16, 185, 129, 0.15);
+        }
         
         .profile-cover-container {
             position: relative;
@@ -2992,6 +3113,33 @@
                         <button id="logout-button" class="profile-button logout">
                             SAIR
                         </button>
+                        <div id="stia-profile-editor" class="stia-profile-card hidden">
+                            <div class="stia-profile-card-header">
+                                <div>
+                                    <h2><i class="fas fa-robot"></i> Perfil da STIA</h2>
+                                    <p class="stia-profile-description">Personalize a aparência da guardiã do chat sempre que ela liberar os botões.</p>
+                                </div>
+                                <span class="stia-profile-chip">Somente STEVEST</span>
+                            </div>
+                            <div class="stia-profile-assets">
+                                <div class="stia-profile-cover-container">
+                                    <div id="stia-profile-cover" class="stia-profile-cover-img"></div>
+                                    <input type="file" id="stia-profile-cover-upload" class="hidden" accept="image/*">
+                                    <button id="stia-profile-cover-button" onclick="document.getElementById('stia-profile-cover-upload').click()" class="profile-cover-upload-button">
+                                        <i class="fas fa-camera text-lg"></i>
+                                    </button>
+                                </div>
+                                <div class="stia-profile-avatar-container">
+                                    <div id="stia-profile-pic" class="stia-profile-avatar-img">S</div>
+                                    <input type="file" id="stia-profile-upload" class="hidden" accept="image/*">
+                                    <button id="stia-profile-photo-button" onclick="document.getElementById('stia-profile-upload').click()" class="profile-upload-button">
+                                        <i class="fas fa-camera text-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="stia-profile-name" class="stia-profile-identity">STIA</div>
+                            <p id="stia-profile-lock-alert" class="stia-profile-lock-alert locked">Peça para a STIA liberar os botões antes de alterar o visual dela.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3509,6 +3657,8 @@
         let rememberMeState = false; // Estado da caixa "Lembrar de mim"
         let stiaStevestProfilePhotoUnlocked = false;
         let stiaStevestProfileCoverUnlocked = false;
+        let stiaOwnProfilePhotoUnlocked = false;
+        let stiaOwnProfileCoverUnlocked = false;
 
         const userProfilesCache = {};
         let allUsersData = {};
@@ -3539,6 +3689,15 @@
         const profileCoverUpload = document.getElementById('profile-cover-upload');
         const profilePhotoButton = document.getElementById('profile-photo-button');
         const profileCoverPhotoButton = document.getElementById('profile-cover-photo-button');
+        const stiaProfileEditorSection = document.getElementById('stia-profile-editor');
+        const stiaProfilePicElement = document.getElementById('stia-profile-pic');
+        const stiaProfileCoverElement = document.getElementById('stia-profile-cover');
+        const stiaProfileUploadInput = document.getElementById('stia-profile-upload');
+        const stiaProfileCoverUploadInput = document.getElementById('stia-profile-cover-upload');
+        const stiaProfilePhotoButton = document.getElementById('stia-profile-photo-button');
+        const stiaProfileCoverButton = document.getElementById('stia-profile-cover-button');
+        const stiaProfileLockAlert = document.getElementById('stia-profile-lock-alert');
+        const stiaProfileNameLabel = document.getElementById('stia-profile-name');
         const nicknameInput = document.getElementById('nickname');
         const passwordInput = document.getElementById('password');
         const rememberMeCheckbox = document.getElementById('remember-me');
@@ -3580,10 +3739,99 @@
             }
         }
 
+        function updateStiaProfileButtonState() {
+            if (!stiaProfileEditorSection) return;
+            const isStevest = currentUserNickname === STIA_PROTECTED_OWNER;
+            const photoLocked = !stiaOwnProfilePhotoUnlocked;
+            const coverLocked = !stiaOwnProfileCoverUnlocked;
+            const disablePhoto = !isStevest || photoLocked;
+            const disableCover = !isStevest || coverLocked;
+
+            if (stiaProfileUploadInput) {
+                stiaProfileUploadInput.disabled = disablePhoto;
+            }
+            if (stiaProfilePhotoButton) {
+                stiaProfilePhotoButton.disabled = disablePhoto;
+            }
+            if (stiaProfileCoverUploadInput) {
+                stiaProfileCoverUploadInput.disabled = disableCover;
+            }
+            if (stiaProfileCoverButton) {
+                stiaProfileCoverButton.disabled = disableCover;
+            }
+
+            if (stiaProfileLockAlert) {
+                const showLocked = !isStevest || photoLocked || coverLocked;
+                stiaProfileLockAlert.classList.toggle('locked', showLocked);
+                stiaProfileLockAlert.classList.toggle('unlocked', isStevest && !photoLocked && !coverLocked);
+
+                if (!isStevest) {
+                    stiaProfileLockAlert.textContent = 'Faça login como STEVEST para alterar o visual da STIA.';
+                } else if (photoLocked && coverLocked) {
+                    stiaProfileLockAlert.textContent = 'Peça para a STIA liberar os botões antes de enviar novas imagens para o perfil dela.';
+                } else if (!photoLocked && coverLocked) {
+                    stiaProfileLockAlert.textContent = 'O botão da foto já está liberado. Falta a STIA liberar a capa.';
+                } else if (photoLocked && !coverLocked) {
+                    stiaProfileLockAlert.textContent = 'O botão da capa já está liberado. Falta a STIA liberar a foto.';
+                } else {
+                    stiaProfileLockAlert.textContent = 'Todos os botões estão liberados! Envie as novas imagens da STIA quando quiser.';
+                }
+            }
+        }
+
+        function updateStiaProfileEditorUI() {
+            if (!stiaProfileEditorSection) return;
+            const isStevest = currentUserNickname === STIA_PROTECTED_OWNER;
+            if (!isStevest) {
+                stiaProfileEditorSection.classList.add('hidden');
+                updateStiaProfileButtonState();
+                return;
+            }
+
+            stiaProfileEditorSection.classList.remove('hidden');
+            const stiaProfileData = allUsersData[STIA_NAME] || {
+                nickname: STIA_NAME,
+                profilePicture: DEFAULT_PROFILE_PIC,
+                profileCover: DEFAULT_PROFILE_COVER
+            };
+
+            if (stiaProfileNameLabel) {
+                stiaProfileNameLabel.textContent = stiaProfileData.nickname || STIA_NAME;
+            }
+
+            if (stiaProfileCoverElement) {
+                if (stiaProfileData.profileCover && stiaProfileData.profileCover !== DEFAULT_PROFILE_COVER) {
+                    stiaProfileCoverElement.style.backgroundImage = `url(${stiaProfileData.profileCover})`;
+                    stiaProfileCoverElement.style.backgroundSize = 'cover';
+                    stiaProfileCoverElement.style.backgroundPosition = 'center';
+                } else {
+                    stiaProfileCoverElement.style.backgroundImage = '';
+                    stiaProfileCoverElement.style.background = 'linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%)';
+                }
+            }
+
+            if (stiaProfilePicElement) {
+                if (stiaProfileData.profilePicture && stiaProfileData.profilePicture !== DEFAULT_PROFILE_PIC) {
+                    stiaProfilePicElement.style.backgroundImage = `url(${stiaProfileData.profilePicture})`;
+                    stiaProfilePicElement.style.backgroundSize = 'cover';
+                    stiaProfilePicElement.style.backgroundPosition = 'center';
+                    stiaProfilePicElement.textContent = '';
+                } else {
+                    stiaProfilePicElement.style.backgroundImage = '';
+                    generateAvatarWithInitial(stiaProfileData.nickname || STIA_NAME, stiaProfilePicElement);
+                }
+            }
+
+            updateStiaProfileButtonState();
+        }
+
         function resetStevestProfileButtonUnlocks() {
             stiaStevestProfilePhotoUnlocked = false;
             stiaStevestProfileCoverUnlocked = false;
+            stiaOwnProfilePhotoUnlocked = false;
+            stiaOwnProfileCoverUnlocked = false;
             updateStevestProfileButtonState();
+            updateStiaProfileButtonState();
         }
         
         const chatMain = document.getElementById('main-chat');
@@ -4284,36 +4532,72 @@
             }
         }
 
-        async function stiaUnlockStevestProfileButtons(uploadType = 'ambos', confirmationMessage = '') {
-            const normalizedType = (uploadType || 'ambos').toLowerCase();
-            const unlockPhoto = ['perfil', 'avatar', 'foto', 'foto_perfil'].includes(normalizedType);
-            const unlockCover = ['capa', 'cover'].includes(normalizedType);
-            const unlockBoth = normalizedType === 'ambos' || normalizedType === 'todos' || normalizedType === 'all' || normalizedType === 'both' || normalizedType === '' || normalizedType === 'perfil_capa';
+        async function stiaUnlockProfileButtons(targetNickname = STIA_PROTECTED_OWNER, uploadType = 'ambos', confirmationMessage = '') {
+            let normalizedTarget = (targetNickname || '').trim().toUpperCase();
+            const normalizedTypeRaw = (uploadType || 'ambos').toLowerCase();
 
-            if (unlockPhoto || unlockBoth) {
-                stiaStevestProfilePhotoUnlocked = true;
+            if (!normalizedTarget) {
+                normalizedTarget = STIA_PROTECTED_OWNER;
             }
-            if (unlockCover || unlockBoth) {
-                stiaStevestProfileCoverUnlocked = true;
+            if (normalizedTarget === '@STIA' || normalizedTarget === 'IA') {
+                normalizedTarget = STIA_NAME;
             }
-
-            if (!unlockPhoto && !unlockCover && !unlockBoth) {
-                stiaStevestProfilePhotoUnlocked = true;
-                stiaStevestProfileCoverUnlocked = true;
+            if (normalizedTypeRaw.includes('stia')) {
+                normalizedTarget = STIA_NAME;
             }
 
-            updateStevestProfileButtonState();
+            let shouldUnlockPhoto = /(perfil|avatar|foto)/.test(normalizedTypeRaw);
+            let shouldUnlockCover = /(capa|cover)/.test(normalizedTypeRaw);
+            const wantsBoth = normalizedTypeRaw === 'ambos' || normalizedTypeRaw === 'todos' || normalizedTypeRaw === 'all' || normalizedTypeRaw === 'both' || normalizedTypeRaw === '' || normalizedTypeRaw === 'perfil_capa';
+            if (wantsBoth) {
+                shouldUnlockPhoto = true;
+                shouldUnlockCover = true;
+            }
+            if (!shouldUnlockPhoto && !shouldUnlockCover) {
+                shouldUnlockPhoto = true;
+                shouldUnlockCover = true;
+            }
 
-            const photoEnabled = stiaStevestProfilePhotoUnlocked;
-            const coverEnabled = stiaStevestProfileCoverUnlocked;
+            const unlockingStiaProfile = normalizedTarget === STIA_NAME;
+
+            if (unlockingStiaProfile) {
+                if (shouldUnlockPhoto) {
+                    stiaOwnProfilePhotoUnlocked = true;
+                }
+                if (shouldUnlockCover) {
+                    stiaOwnProfileCoverUnlocked = true;
+                }
+                if (!shouldUnlockPhoto && !shouldUnlockCover) {
+                    stiaOwnProfilePhotoUnlocked = true;
+                    stiaOwnProfileCoverUnlocked = true;
+                }
+                updateStiaProfileButtonState();
+            } else {
+                if (shouldUnlockPhoto) {
+                    stiaStevestProfilePhotoUnlocked = true;
+                }
+                if (shouldUnlockCover) {
+                    stiaStevestProfileCoverUnlocked = true;
+                }
+                if (!shouldUnlockPhoto && !shouldUnlockCover) {
+                    stiaStevestProfilePhotoUnlocked = true;
+                    stiaStevestProfileCoverUnlocked = true;
+                }
+                updateStevestProfileButtonState();
+            }
+
+            const photoEnabled = unlockingStiaProfile ? stiaOwnProfilePhotoUnlocked : stiaStevestProfilePhotoUnlocked;
+            const coverEnabled = unlockingStiaProfile ? stiaOwnProfileCoverUnlocked : stiaStevestProfileCoverUnlocked;
+
             let unlockedLabel = 'os botões de foto e capa';
             if (photoEnabled && !coverEnabled) {
-                unlockedLabel = 'o botão de foto de perfil';
+                unlockedLabel = 'apenas o botão de foto';
             } else if (!photoEnabled && coverEnabled) {
-                unlockedLabel = 'o botão da capa do perfil';
+                unlockedLabel = 'apenas o botão da capa';
             }
 
-            const finalMessage = confirmationMessage || `🖼️ STIA liberou ${unlockedLabel} para o ${STIA_PROTECTED_OWNER}.`;
+            const targetLabel = unlockingStiaProfile ? 'para o perfil da STIA' : `para o ${STIA_PROTECTED_OWNER}`;
+            const finalMessage = confirmationMessage || `${unlockingStiaProfile ? '🤖' : '🖼️'} STIA liberou ${unlockedLabel} ${targetLabel}.`;
             if (finalMessage) {
                 await stiaSendMessage(finalMessage);
             }
@@ -4554,7 +4838,7 @@
         }
 
         async function stiaHandleStevestCommand(commandText) {
-            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|deletar_perfil|limpar_mensagens|gerenciar_admin|premium|acesso_privado|liberar_upload|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat","nivelAdmin":0,"premiumDias":0,"tipoPremium":"conceder|revogar|ilimitado","chatParceiro":"SEGUNDO USUÁRIO OU VAZIO","tipoUpload":"perfil|capa|ambos"}. Pedido: "${commandText}"`;
+            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|deletar_perfil|limpar_mensagens|gerenciar_admin|premium|acesso_privado|liberar_upload|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat","nivelAdmin":0,"premiumDias":0,"tipoPremium":"conceder|revogar|ilimitado","chatParceiro":"SEGUNDO USUÁRIO OU VAZIO","tipoUpload":"perfil|capa|ambos"}. Quando a ação for liberar_upload, use o campo alvo para dizer se a liberação é para o STEVEST ou para a própria STIA. Pedido: "${commandText}"`;
             const response = await callStiaApi(prompt);
             const parsed = extractStiaJson(response);
             if (!parsed) return false;
@@ -4650,7 +4934,7 @@
                     }
                     break;
                 case 'liberar_upload':
-                    await stiaUnlockStevestProfileButtons(uploadType || 'ambos', message);
+                    await stiaUnlockProfileButtons(target || STIA_PROTECTED_OWNER, uploadType || 'ambos', message);
                     return true;
                 case 'ignorar':
                     return true;
@@ -7066,6 +7350,7 @@
             }
 
             updateStevestProfileButtonState();
+            updateStiaProfileEditorUI();
         }
         
         // Função para carregar o estado da caixa "Lembrar de mim" do Firebase
@@ -7254,7 +7539,13 @@
         
         profileUpload.addEventListener('change', handleProfileUpload);
         profileCoverUpload.addEventListener('change', handleProfileCoverUpload);
-        
+        if (stiaProfileUploadInput) {
+            stiaProfileUploadInput.addEventListener('change', handleStiaProfilePhotoUpload);
+        }
+        if (stiaProfileCoverUploadInput) {
+            stiaProfileCoverUploadInput.addEventListener('change', handleStiaProfileCoverUpload);
+        }
+
         // Função para alternar o bloqueio de mensagens privadas
         async function togglePrivateMessagesLock() {
             if (currentUserNickname === 'USUÁRIO ANÔNIMO') {
@@ -7292,7 +7583,156 @@
                 }
             }
         }
-        
+
+        async function handleStiaProfilePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                await showAlertModal('ACESSO NEGADO', 'Somente o STEVEST pode alterar a foto da STIA.', 'fas fa-robot', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            if (!stiaOwnProfilePhotoUnlocked) {
+                await showAlertModal('BLOQUEADO', 'Peça para a STIA liberar o botão de foto antes de enviar a nova imagem dela.', 'fas fa-lock', 'warning');
+                event.target.value = '';
+                return;
+            }
+
+            const inputRef = event.target;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const newPhotoData = e.target.result;
+                const oldPhotoUrl = (allUsersData[STIA_NAME]?.profilePicture) || DEFAULT_PROFILE_PIC;
+
+                showUploadProgressModal();
+                uploadPercentageText.textContent = 'ENVIANDO NOVA FOTO DA STIA...';
+                uploadProgressBar.style.width = '0%';
+
+                const fileName = `profile_pics/${STIA_NAME}_${Date.now()}`;
+                const storageRef = storage.ref(fileName);
+                const uploadTask = storageRef.putString(newPhotoData, 'data_url');
+
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        uploadPercentageText.textContent = `${Math.round(progress)}%`;
+                        uploadProgressBar.style.width = `${progress}%`;
+                    },
+                    async (error) => {
+                        console.error('ERRO AO ENVIAR FOTO DA STIA: ', error);
+                        await showAlertModal('ERRO', 'Não foi possível atualizar a foto da STIA.', 'fas fa-times-circle', 'error');
+                        hideUploadProgressModal();
+                        inputRef.value = '';
+                    },
+                    async () => {
+                        try {
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            await usersProfileRef.child(STIA_NAME).update({
+                                profilePicture: downloadURL
+                            });
+
+                            await deleteOldProfilePicture(oldPhotoUrl);
+
+                            userProfilesCache[STIA_NAME] = userProfilesCache[STIA_NAME] || {};
+                            userProfilesCache[STIA_NAME].profilePicture = downloadURL;
+                            allUsersData[STIA_NAME] = allUsersData[STIA_NAME] || { nickname: STIA_NAME };
+                            allUsersData[STIA_NAME].profilePicture = downloadURL;
+
+                            updateUserAvatars(STIA_NAME, downloadURL);
+                            updateStiaProfileEditorUI();
+
+                            hideUploadProgressModal();
+                            await showAlertModal('STIA ATUALIZADA', 'A foto da STIA foi atualizada com sucesso!', 'fas fa-robot', 'success');
+                        } catch (error) {
+                            console.error('ERRO AO ATUALIZAR FOTO DA STIA: ', error);
+                            hideUploadProgressModal();
+                            await showAlertModal('ERRO', 'Erro ao atualizar a foto da STIA.', 'fas fa-times-circle', 'error');
+                        } finally {
+                            inputRef.value = '';
+                        }
+                    }
+                );
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        async function handleStiaProfileCoverUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                await showAlertModal('ACESSO NEGADO', 'Somente o STEVEST pode alterar a capa da STIA.', 'fas fa-robot', 'error');
+                event.target.value = '';
+                return;
+            }
+
+            if (!stiaOwnProfileCoverUnlocked) {
+                await showAlertModal('BLOQUEADO', 'Peça para a STIA liberar o botão da capa antes de enviar a nova imagem dela.', 'fas fa-lock', 'warning');
+                event.target.value = '';
+                return;
+            }
+
+            const inputRef = event.target;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const newCoverData = e.target.result;
+                const oldCoverUrl = (allUsersData[STIA_NAME]?.profileCover) || DEFAULT_PROFILE_COVER;
+
+                showUploadProgressModal();
+                uploadPercentageText.textContent = 'ENVIANDO NOVA CAPA DA STIA...';
+                uploadProgressBar.style.width = '0%';
+
+                const fileName = `profile_covers/${STIA_NAME}_${Date.now()}`;
+                const storageRef = storage.ref(fileName);
+                const uploadTask = storageRef.putString(newCoverData, 'data_url');
+
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        uploadPercentageText.textContent = `${Math.round(progress)}%`;
+                        uploadProgressBar.style.width = `${progress}%`;
+                    },
+                    async (error) => {
+                        console.error('ERRO AO ENVIAR CAPA DA STIA: ', error);
+                        await showAlertModal('ERRO', 'Não foi possível atualizar a capa da STIA.', 'fas fa-times-circle', 'error');
+                        hideUploadProgressModal();
+                        inputRef.value = '';
+                    },
+                    async () => {
+                        try {
+                            const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+                            await usersProfileRef.child(STIA_NAME).update({
+                                profileCover: downloadURL
+                            });
+
+                            await deleteOldProfilePicture(oldCoverUrl);
+
+                            userProfilesCache[STIA_NAME] = userProfilesCache[STIA_NAME] || {};
+                            userProfilesCache[STIA_NAME].profileCover = downloadURL;
+                            allUsersData[STIA_NAME] = allUsersData[STIA_NAME] || { nickname: STIA_NAME };
+                            allUsersData[STIA_NAME].profileCover = downloadURL;
+
+                            updateStiaProfileEditorUI();
+
+                            hideUploadProgressModal();
+                            await showAlertModal('STIA ATUALIZADA', 'A capa da STIA foi atualizada com sucesso!', 'fas fa-robot', 'success');
+                        } catch (error) {
+                            console.error('ERRO AO ATUALIZAR CAPA DA STIA: ', error);
+                            hideUploadProgressModal();
+                            await showAlertModal('ERRO', 'Erro ao atualizar a capa da STIA.', 'fas fa-times-circle', 'error');
+                        } finally {
+                            inputRef.value = '';
+                        }
+                    }
+                );
+            };
+
+            reader.readAsDataURL(file);
+        }
+
         togglePrivateMessagesBtn.addEventListener('click', togglePrivateMessagesLock);
         
         async function handleSaveProfile() {
