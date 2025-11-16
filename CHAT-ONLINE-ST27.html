@@ -1462,13 +1462,26 @@
         }
 
         .stia-profile-screen-container {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 32px 24px 48px;
             display: flex;
             flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            backdrop-filter: blur(20px);
+            padding: 32px 24px 48px;
             gap: 24px;
-            min-height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 50;
+            overflow-y: auto;
+        }
+
+        .stia-profile-screen-header,
+        .stia-profile-screen-content {
+            width: 100%;
+            max-width: 960px;
+            margin: 0 auto;
         }
 
         .stia-profile-screen-header {
@@ -1499,6 +1512,8 @@
             display: flex;
             flex-direction: column;
             gap: 24px;
+            align-items: center;
+            justify-content: center;
         }
 
         .stia-profile-locked-message {
