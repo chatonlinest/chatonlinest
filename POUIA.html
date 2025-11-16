@@ -210,6 +210,8 @@
     let bolhaTimer = null; // Timer para esconder a bolha de fala
     const ambienteEvolucao = document.getElementById('ambiente-evolucao');
     const estiloEvolucao = document.getElementById('pou-evolution-style');
+    let autoEvolucaoTimer = null;
+    let autoEvolucaoAtiva = false;
 
     // --- Firebase ---
     const firebaseConfig = {
@@ -468,7 +470,7 @@
         olharPara(0, -MAX_MOVIMENTO_PUPILA / 2, 0.2);
 
         try {
-            await chamarIA(promptUsuario);
+            await chamarIA(promptUsuario, { modo: 'chat' });
         } catch (error) {
             console.error("Erro ao chamar IA:", error);
             mostrarBolhaFala("Tive um curto-circuito! Tente de novo.", false);
@@ -513,7 +515,7 @@
      * Envia o prompt para a API Gemini e processa a resposta.
      * @param {string} promptUsuario - O texto do usuário.
      */
-    async function chamarIA(promptUsuario) {
+    async function chamarIA(promptUsuario, contexto = { modo: 'chat' }) {
         // O prompt do sistema instrui a IA a agir como o Pou e a fornecer uma emoção
         const systemPrompt = `
           Você é o Pou, uma criatura alienígena amigável, consciente e curiosa.
@@ -577,10 +579,10 @@
         
         if (candidate && candidate.content?.parts?.[0]?.text) {
             const textoCompleto = candidate.content.parts[0].text;
-            analisarRespostaIA(textoCompleto);
+            analisarRespostaIA(textoCompleto, contexto);
         } else {
             console.error("Resposta da IA inválida:", result);
-            analisarRespostaIA("Humm... não sei o que dizer. [EMOÇÃO:NEUTRO]");
+            analisarRespostaIA("Humm... não sei o que dizer. [EMOÇÃO:NEUTRO]", contexto);
         }
     }
 
@@ -588,7 +590,7 @@
      * Analisa a resposta da IA, separa o texto da emoção e aciona as reações.
      * @param {string} textoCompleto - A resposta bruta da IA (incluindo a tag).
      */
-    function analisarRespostaIA(textoCompleto) {
+    function analisarRespostaIA(textoCompleto, contexto = { modo: 'chat' }) {
         let emocao = "NEUTRO";
         let textoVisivel = textoCompleto;
 
@@ -601,9 +603,11 @@
             textoVisivel = textoCompleto.replace(regexEmocao, '').trim();
         }
 
-        // Mostra a fala e aciona a reação
-        mostrarBolhaFala(textoVisivel, false);
-        reagirComEmocao(emocao);
+        if (contexto.modo === 'chat') {
+            // Mostra a fala e aciona a reação apenas em conversas
+            mostrarBolhaFala(textoVisivel, false);
+            reagirComEmocao(emocao);
+        }
 
         const blocos = extrairBlocosCodigo(textoCompleto);
         if (blocos.html.length || blocos.css.length || blocos.js.length) {
@@ -730,6 +734,37 @@
 
     // Loop autônomo de PISCAR (sempre ativo)
     setInterval(piscarOlhos, 2000 + (Math.random() * 5000)); // Pisca a cada 2-7 segundos
+
+    // === AUTO EVOLUÇÃO AUTÔNOMA ===
+
+    function coletarEstadoAtual() {
+        const htmlAtual = ambienteEvolucao.innerHTML.trim().slice(0, 1000);
+        const cssAtual = estiloEvolucao.textContent.trim().slice(0, 1000);
+        return `HTML atual do laboratório:\n${htmlAtual || 'vazio'}\nCSS atual:\n${cssAtual || 'vazio'}`;
+    }
+
+    function agendarAutoEvolucao() {
+        clearTimeout(autoEvolucaoTimer);
+        const intervalo = 9000 + Math.random() * 6000; // entre 9s e 15s
+        autoEvolucaoTimer = setTimeout(executarAutoEvolucao, intervalo);
+    }
+
+    async function executarAutoEvolucao() {
+        if (autoEvolucaoAtiva) return;
+        autoEvolucaoAtiva = true;
+        const estadoAtual = coletarEstadoAtual();
+        const promptAuto = `Planeje sua próxima auto evolução com base no seguinte estado:\n${estadoAtual}\nFoque em auto evolução, animações (olhos, boca, expressões faciais) ou melhorias ambientais. Caso crie códigos, mantenha-os curtos e funcionais.`;
+        try {
+            await chamarIA(promptAuto, { modo: 'auto' });
+        } catch (erro) {
+            console.error('Auto evolução falhou', erro);
+        } finally {
+            autoEvolucaoAtiva = false;
+            agendarAutoEvolucao();
+        }
+    }
+
+    agendarAutoEvolucao();
 
   </script>
 
