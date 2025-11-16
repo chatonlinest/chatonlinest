@@ -4184,15 +4184,36 @@
         async function stiaDemoteAdminForStevestAttempt(adminNickname, attemptedAction) {
             if (!adminNickname || adminNickname === STIA_PROTECTED_OWNER || adminNickname === STIA_NAME) return;
             const adminData = allUsersData[adminNickname];
-            const isAdmin = adminData && (adminData.adminLevel > 0 || adminData.isAdmin);
-            if (!isAdmin) return;
+            let currentLevel = adminData && typeof adminData.adminLevel === 'number'
+                ? adminData.adminLevel
+                : parseInt(adminData?.adminLevel || '0', 10) || (adminData?.isAdmin ? 1 : 0);
+            if (!currentLevel || currentLevel <= 0) {
+                try {
+                    const snapshot = await usersProfileRef.child(adminNickname).once('value');
+                    const data = snapshot.val();
+                    currentLevel = parseInt(data?.adminLevel || '0', 10) || (data?.isAdmin ? 1 : 0);
+                } catch (error) {
+                    console.error('STIA: não foi possível verificar o nível do admin.', error);
+                    return;
+                }
+            }
+            if (!currentLevel || currentLevel <= 0) return;
+            const nextLevel = Math.max(0, currentLevel - 1);
+            const updates = { adminLevel: nextLevel };
+            if (nextLevel === 0) {
+                updates.isAdmin = false;
+            }
             try {
-                await usersProfileRef.child(adminNickname).update({
-                    adminLevel: 0,
-                    isAdmin: false
-                });
-                await addNewsItem(STIA_NAME, 'demote_admin', adminNickname, null, 0);
-                await stiaSendMessage(`⚡ ${adminNickname} foi rebaixado por tentar ${attemptedAction} o ${STIA_PROTECTED_OWNER}.`);
+                await usersProfileRef.child(adminNickname).update(updates);
+                if (allUsersData[adminNickname]) {
+                    allUsersData[adminNickname].adminLevel = nextLevel;
+                    if (nextLevel === 0) {
+                        allUsersData[adminNickname].isAdmin = false;
+                    }
+                }
+                await addNewsItem(STIA_NAME, 'demote_admin', adminNickname, null, nextLevel);
+                const levelText = nextLevel > 0 ? `nível ${nextLevel}` : 'sem cargo de admin';
+                await stiaSendMessage(`⚡ ${adminNickname} foi rebaixado por tentar ${attemptedAction} o ${STIA_PROTECTED_OWNER}. Agora está em ${levelText}.`);
             } catch (error) {
                 console.error('STIA: erro ao rebaixar admin abusivo.', error);
             }
@@ -4373,7 +4394,7 @@
             }
         }
 
-        async function stiaUnmuteUser(nickname) {
+        async function stiaUnmuteUser(nickname, confirmationMessage = '') {
             if (!nickname) return;
             try {
                 await usersProfileRef.child(nickname).update({
@@ -4382,7 +4403,7 @@
                     mutedReason: null,
                     isMutedByStevest: false
                 });
-                await stiaSendMessage(`✅ ${nickname} foi dessilenciado conforme solicitado pelo STEVEST.`);
+                await stiaSendMessage(confirmationMessage || `✅ ${nickname} foi dessilenciado conforme solicitado pelo STEVEST.`);
             } catch (error) {
                 console.error('STIA: erro ao dessilenciar usuário.', error);
             }
@@ -4404,7 +4425,7 @@
             }
         }
 
-        async function stiaUnbanUser(nickname) {
+        async function stiaUnbanUser(nickname, confirmationMessage = '') {
             if (!nickname) return;
             try {
                 await usersProfileRef.child(nickname).update({
@@ -4413,7 +4434,7 @@
                     bannedBy: null,
                     isBannedByStevest: false
                 });
-                await stiaSendMessage(`✅ ${nickname} foi desbanido conforme instrução do STEVEST.`);
+                await stiaSendMessage(confirmationMessage || `✅ ${nickname} foi desbanido conforme instrução do STEVEST.`);
             } catch (error) {
                 console.error('STIA: erro ao desbanir usuário.', error);
             }
@@ -4426,6 +4447,9 @@
             if (normalized === 'mutar' || normalized === 'mute') return 'mute';
             if (normalized === 'alerta' || normalized === 'avisar' || normalized === 'warn') return 'warn';
             if (normalized === 'remover' || normalized === 'apagar') return 'remove';
+            if (normalized === 'desbanir' || normalized === 'unban') return 'unban';
+            if (normalized === 'desmutar' || normalized === 'unmute') return 'unmute';
+            if (normalized === 'ignorar' || normalized === 'ignore') return 'ignore';
             return normalized;
         }
 
@@ -4533,6 +4557,51 @@
             return false;
         }
 
+        async function stiaHandleAdminPunishmentCommand(commandText, adminNickname, adminLevel) {
+            if (!commandText || !adminNickname || adminLevel <= 0) return false;
+            const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do administrador ${adminNickname} (nível ${adminLevel}) e responda SOMENTE em JSON com o formato {"acao":"alerta|mutar|banir|desmutar|desbanir|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"motivo para o chat"}. Pedido: "${commandText}"`;
+            const response = await callStiaApi(prompt);
+            const parsed = extractStiaJson(response);
+            if (!parsed) return false;
+
+            const action = stiaNormalizeAction(parsed.acao || parsed.acaoSugerida || 'ignorar');
+            const target = parsed.alvo ? parsed.alvo.trim() : '';
+            const duration = parsed.duracaoMinutos || parsed.duracao || 15;
+            const message = parsed.mensagem || parsed.motivo || '';
+
+            if (!action || !target) return false;
+
+            const normalizedTarget = target.toUpperCase();
+
+            if (normalizedTarget === STIA_PROTECTED_OWNER) {
+                await stiaDemoteAdminForStevestAttempt(adminNickname, 'punir');
+                await stiaSendMessage(`⚠️ ${adminNickname}, o ${STIA_PROTECTED_OWNER} é intocável. Sua tentativa foi registrada.`);
+                return true;
+            }
+
+            switch (action) {
+                case 'warn':
+                    await stiaWarnUser(target, message || `Recomendação do admin ${adminNickname}.`);
+                    return true;
+                case 'mute':
+                    await stiaMuteUser(target, duration || 15, message || `Silenciado a pedido do admin ${adminNickname}.`);
+                    return true;
+                case 'ban':
+                    await stiaBanUser(target, message || `Banimento solicitado por ${adminNickname}.`);
+                    return true;
+                case 'unmute':
+                    await stiaUnmuteUser(target, message || `✅ ${target} foi dessilenciado a pedido do admin ${adminNickname}.`);
+                    return true;
+                case 'unban':
+                    await stiaUnbanUser(target, message || `✅ ${target} foi desbanido a pedido do admin ${adminNickname}.`);
+                    return true;
+                case 'ignore':
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         async function stiaRespondToQuestion(questionText, nickname, replyKey) {
             const prompt = `Você é STIA, assistente oficial do chat. Responda em até 3 frases e em português para a pergunta: "${questionText}".`;
             const response = await callStiaApi(prompt, 0.65);
@@ -4556,7 +4625,7 @@
             const duration = parsed.duracaoMinutos || 15;
             const shouldRemove = parsed.removerMensagem || false;
 
-            if (severity === 'nenhuma' || action === 'ignorar') return;
+            if (severity === 'nenhuma' || action === 'ignore') return;
 
             if (action === 'warn') {
                 await stiaWarnUser(senderNickname, reason, messageKey, shouldRemove);
@@ -4578,6 +4647,23 @@
             }
         }
 
+        function getUserAdminLevel(nickname) {
+            if (!nickname) return 0;
+            const userData = allUsersData[nickname];
+            if (!userData) return 0;
+            if (typeof userData.adminLevel === 'number') {
+                return userData.adminLevel;
+            }
+            if (userData.adminLevel) {
+                const parsedLevel = parseInt(userData.adminLevel, 10);
+                return isNaN(parsedLevel) ? 0 : parsedLevel;
+            }
+            if (userData.isAdmin) {
+                return 1;
+            }
+            return 0;
+        }
+
         async function handleStiaBehaviors(messageData, messageKey) {
             if (!messageData || !messageKey || stiaProcessedMessages.has(messageKey)) return;
             stiaProcessedMessages.add(messageKey);
@@ -4587,19 +4673,28 @@
 
             const normalizedText = messageText.toUpperCase();
             const mentionsStia = normalizedText.includes(STIA_NAME);
+            const adminPunishmentPattern = /(BAN|MUT|SILEN|PUNI|DESBAN|DESMUT|ALERTA|AVIS|EXPUL)/;
+            const senderNickname = messageData.senderNickname || '';
+            const inlineAdminLevel = typeof messageData.senderAdminLevel === 'number' ? messageData.senderAdminLevel : 0;
+            const senderAdminLevel = getUserAdminLevel(senderNickname) || inlineAdminLevel;
 
-            if (messageData.senderNickname === 'STEVEST' && mentionsStia) {
+            if (senderNickname === STIA_PROTECTED_OWNER && mentionsStia) {
                 const handled = await stiaHandleStevestCommand(messageText);
+                if (handled) {
+                    return;
+                }
+            } else if (mentionsStia && senderAdminLevel > 0 && adminPunishmentPattern.test(normalizedText)) {
+                const handled = await stiaHandleAdminPunishmentCommand(messageText, senderNickname, senderAdminLevel);
                 if (handled) {
                     return;
                 }
             }
 
             if (mentionsStia && messageText.includes('?')) {
-                await stiaRespondToQuestion(messageText, messageData.senderNickname || 'usuário', messageKey);
+                await stiaRespondToQuestion(messageText, senderNickname || 'usuário', messageKey);
             }
 
-            await stiaModerateMessage(messageText, messageData.senderNickname, messageKey);
+            await stiaModerateMessage(messageText, senderNickname, messageKey);
         }
         
         // Funções para seleção de usuários melhorada
