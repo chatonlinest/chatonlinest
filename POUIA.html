@@ -271,8 +271,13 @@
     let bolhaTimer = null; // Timer para esconder a bolha de fala
 
     // --- Configuração da IA (Seguindo as diretrizes) ---
-    const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM"; // Chave da API (deixe em branco, será gerenciado pelo ambiente)
-    const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
+    const chaveGeminiExterna = typeof window !== 'undefined' && window.POUIA_GEMINI_KEY
+        ? String(window.POUIA_GEMINI_KEY).trim()
+        : '';
+    const chaveDaApi = (chaveGeminiExterna || "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM").trim();
+    const possuiChaveGemini = chaveDaApi.length > 0;
+    const urlGeminiBase = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=';
+    const urlDaApi = possuiChaveGemini ? `${urlGeminiBase}${encodeURIComponent(chaveDaApi)}` : '';
 
     // --- Configuração do Firebase para memória persistente ---
     const firebaseConfig = {
@@ -321,6 +326,10 @@
     let estaInteragindo = true; // Flag para saber se o usuário está interagindo
     let interacaoTimer = null; // Timer para detectar o início da ociosidade
     const MAX_MOVIMENTO_PUPILA = 8; // Limite de movimento da pupila
+
+    function normalizarTexto(valor) {
+        return typeof valor === 'string' ? valor.trim() : '';
+    }
 
     /**
      * Move as pupilas do Pou seguindo o cursor/touch.
@@ -639,6 +648,11 @@
           No final EXATO da sua mensagem visível, mantenha a tag [EMOÇÃO:ALEGRE|TRISTE|SURPRESO|NEUTRO] sem quebrar linha.
         `;
 
+        if (!possuiChaveGemini) {
+            console.warn('Chave da IA não configurada. Pulei a chamada para evitar erros.');
+            return analisarRespostaIA('Ainda não conectei minha mente à nuvem, mas continuo melhorando! [EMOÇÃO:TRISTE]');
+        }
+
         const payload = {
             contents: [{ parts: [{ text: promptUsuario }] }],
             systemInstruction: {
@@ -754,6 +768,11 @@
             timestamp: evolucao.timestamp || Date.now()
         };
 
+        registro.ideia = normalizarTexto(registro.ideia);
+        registro.css = normalizarTexto(registro.css);
+        registro.html = normalizarTexto(registro.html);
+        registro.js = normalizarTexto(registro.js);
+
         if (!registro.ideia) {
             registro.ideia = criarResumoEvolucao(registro);
         }
@@ -780,36 +799,40 @@
 
         const identificador = chave || `local-${Date.now()}`;
 
-        if (evolucao.css && estiloDinamico) {
-            estiloDinamico.textContent += `\n/* Evolução ${identificador} */\n${evolucao.css}\n`;
+        const css = normalizarTexto(evolucao.css);
+        if (css && estiloDinamico) {
+            estiloDinamico.textContent += `\n/* Evolução ${identificador} */\n${css}\n`;
         }
 
-        if (evolucao.html && laboratorioEvolucao) {
+        const html = normalizarTexto(evolucao.html);
+        if (html && laboratorioEvolucao) {
             const wrapper = document.createElement('div');
             wrapper.className = 'pouia-injecao';
-            wrapper.innerHTML = evolucao.html;
+            wrapper.innerHTML = html;
             wrapper.dataset.evolucaoId = identificador;
             laboratorioEvolucao.appendChild(wrapper);
         }
 
-        if (evolucao.js) {
+        const js = normalizarTexto(evolucao.js);
+        if (js) {
             try {
-                const executar = new Function(evolucao.js);
+                const executar = new Function(js);
                 executar();
             } catch (erroJS) {
                 console.error('Falha ao aplicar JS da evolução:', erroJS);
             }
         }
 
-        adicionarIdeiaMemoria(evolucao.ideia || criarResumoEvolucao(evolucao));
+        adicionarIdeiaMemoria(normalizarTexto(evolucao.ideia) || criarResumoEvolucao(evolucao));
     }
 
     /**
      * Mantém um cache local com as últimas ideias geradas.
      */
     function adicionarIdeiaMemoria(ideia) {
-        if (!ideia) return;
-        ideiasRecentes.push(ideia);
+        const ideiaLimpa = normalizarTexto(ideia);
+        if (!ideiaLimpa) return;
+        ideiasRecentes.push(ideiaLimpa);
         if (ideiasRecentes.length > IDEIAS_CACHE_MAX) {
             ideiasRecentes = ideiasRecentes.slice(-IDEIAS_CACHE_MAX);
         }
@@ -820,10 +843,15 @@
      */
     function criarResumoEvolucao(evolucao) {
         if (!evolucao) return 'Atualização misteriosa.';
-        if (evolucao.ideia) return evolucao.ideia;
-        if (evolucao.css) return 'Refinei meu estilo visual.';
-        if (evolucao.html) return 'Adicionei elementos visuais novos.';
-        if (evolucao.js) return 'Expandi minhas funções internas.';
+        const ideia = normalizarTexto(evolucao.ideia);
+        const css = normalizarTexto(evolucao.css);
+        const html = normalizarTexto(evolucao.html);
+        const js = normalizarTexto(evolucao.js);
+
+        if (ideia) return ideia;
+        if (css) return 'Refinei meu estilo visual.';
+        if (html) return 'Adicionei elementos visuais novos.';
+        if (js) return 'Expandi minhas funções internas.';
         return 'Atualização misteriosa.';
     }
 
