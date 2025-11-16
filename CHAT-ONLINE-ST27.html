@@ -1461,6 +1461,60 @@
             justify-content: center;
         }
 
+        .stia-profile-screen-container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 32px 24px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            min-height: 100%;
+        }
+
+        .stia-profile-screen-header {
+            background: white;
+            border-radius: 18px;
+            padding: 24px 28px;
+            box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
+
+        .stia-profile-screen-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            letter-spacing: 0.05em;
+        }
+
+        .stia-profile-screen-subtitle {
+            margin-top: 8px;
+            font-size: 0.95rem;
+            color: #475569;
+        }
+
+        .stia-profile-screen-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .stia-profile-locked-message {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(244, 114, 182, 0.15) 100%);
+            border: 1px dashed rgba(248, 113, 113, 0.4);
+            color: #be123c;
+            padding: 16px 20px;
+            border-radius: 16px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .stia-profile-screen-container .stia-profile-card {
+            margin-top: 0;
+        }
+
         .stia-profile-card {
             width: 100%;
             max-width: 640px;
@@ -3120,6 +3174,32 @@
                         <button id="logout-button" class="profile-button logout">
                             SAIR
                         </button>
+                    </div>
+                </div>
+            </div>
+            <div id="stia-profile-screen" class="hidden flex-1 overflow-hidden bg-gray-50 relative">
+                <div class="stia-profile-screen-container">
+                    <div class="stia-profile-screen-header">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <button id="back-to-profile-from-stia" class="back-button">
+                                    <i class="fas fa-arrow-left"></i>
+                                </button>
+                                <h1 class="stia-profile-screen-title">
+                                    <i class="fas fa-robot mr-3"></i>
+                                    PERFIL DA STIA
+                                </h1>
+                            </div>
+                            <button id="close-stia-profile-screen" class="visit-profile-close-button">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <p class="stia-profile-screen-subtitle">Uma área dedicada para você gerenciar o visual da protetora do chat.</p>
+                    </div>
+                    <div class="stia-profile-screen-content">
+                        <div id="stia-profile-locked-message" class="stia-profile-locked-message hidden">
+                            Apenas o STEVEST pode acessar esta área exclusiva para atualizar a STIA.
+                        </div>
                         <div id="stia-profile-editor" class="stia-profile-card hidden">
                             <div class="stia-profile-card-header">
                                 <div>
@@ -3690,6 +3770,9 @@
         const profileScreen = document.getElementById('profile-screen');
         const profileScreenButton = document.getElementById('profile-screen-button');
         const closeProfileScreenButton = document.getElementById('close-profile-screen');
+        const stiaProfileScreen = document.getElementById('stia-profile-screen');
+        const closeStiaProfileScreenButton = document.getElementById('close-stia-profile-screen');
+        const backToProfileFromStiaButton = document.getElementById('back-to-profile-from-stia');
         const profilePic = document.getElementById('profile-pic');
         const profileCover = document.getElementById('profile-cover');
         const profileUpload = document.getElementById('profile-upload');
@@ -3705,6 +3788,7 @@
         const stiaProfileCoverButton = document.getElementById('stia-profile-cover-button');
         const stiaProfileLockAlert = document.getElementById('stia-profile-lock-alert');
         const stiaProfileNameLabel = document.getElementById('stia-profile-name');
+        const stiaProfileLockedMessage = document.getElementById('stia-profile-locked-message');
         const nicknameInput = document.getElementById('nickname');
         const passwordInput = document.getElementById('password');
         const rememberMeCheckbox = document.getElementById('remember-me');
@@ -3730,14 +3814,7 @@
 
         if (stiaProfileShortcutButton) {
             stiaProfileShortcutButton.addEventListener('click', () => {
-                if (!stiaProfileEditorSection || stiaProfileEditorSection.classList.contains('hidden')) return;
-                stiaProfileEditorSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                stiaProfileEditorSection.classList.remove('stia-profile-highlight');
-                void stiaProfileEditorSection.offsetWidth;
-                stiaProfileEditorSection.classList.add('stia-profile-highlight');
-                setTimeout(() => {
-                    stiaProfileEditorSection.classList.remove('stia-profile-highlight');
-                }, 2000);
+                showStiaProfileScreen();
             });
         }
 
@@ -3808,10 +3885,16 @@
             }
             if (!isStevest) {
                 stiaProfileEditorSection.classList.add('hidden');
+                if (stiaProfileLockedMessage) {
+                    stiaProfileLockedMessage.classList.remove('hidden');
+                }
                 updateStiaProfileButtonState();
                 return;
             }
 
+            if (stiaProfileLockedMessage) {
+                stiaProfileLockedMessage.classList.add('hidden');
+            }
             stiaProfileEditorSection.classList.remove('hidden');
             const stiaProfileData = allUsersData[STIA_NAME] || {
                 nickname: STIA_NAME,
@@ -5746,6 +5829,7 @@
             
             // Ocultar todas as telas
             profileScreen.classList.add('hidden');
+            stiaProfileScreen.classList.add('hidden');
             usersScreen.classList.add('hidden');
             adminScreen.classList.add('hidden');
             chatMain.classList.add('hidden');
@@ -5759,6 +5843,10 @@
                 case 'profile':
                     profileScreen.classList.remove('hidden');
                     updateProfileScreenUI();
+                    break;
+                case 'stia-profile':
+                    stiaProfileScreen.classList.remove('hidden');
+                    updateStiaProfileEditorUI();
                     break;
                 case 'users':
                     usersScreen.classList.remove('hidden');
@@ -5821,7 +5909,26 @@
         function showProfileScreen() {
             navigateToScreen('profile');
         }
-        
+
+        function showStiaProfileScreen() {
+            if (currentUserNickname !== STIA_PROTECTED_OWNER) {
+                showAlertModal('ACESSO RESTRITO', 'Apenas o STEVEST pode gerenciar o perfil da STIA.', 'fas fa-lock', 'warning');
+                return;
+            }
+
+            updateStiaProfileEditorUI();
+            navigateToScreen('stia-profile');
+
+            if (stiaProfileEditorSection) {
+                stiaProfileEditorSection.classList.remove('stia-profile-highlight');
+                void stiaProfileEditorSection.offsetWidth;
+                stiaProfileEditorSection.classList.add('stia-profile-highlight');
+                setTimeout(() => {
+                    stiaProfileEditorSection.classList.remove('stia-profile-highlight');
+                }, 2000);
+            }
+        }
+
         function showVisitProfileScreen(userNickname) {
             currentVisitProfileUser = userNickname;
             const targetUserProfile = allUsersData[userNickname] || { 
@@ -6032,6 +6139,7 @@
         
         profileScreenButton.addEventListener('click', showProfileScreen);
         closeProfileScreenButton.addEventListener('click', () => goBack());
+        closeStiaProfileScreenButton.addEventListener('click', () => goBack());
         usersScreenButton.addEventListener('click', showUsersScreen);
         closeUsersScreenButton.addEventListener('click', () => goBack());
         adminScreenButton.addEventListener('click', showAdminScreen);
@@ -6045,6 +6153,7 @@
         
         // Botões de voltar com histórico
         document.getElementById('back-to-main-from-profile').addEventListener('click', () => goBack());
+        backToProfileFromStiaButton.addEventListener('click', () => goBack());
         document.getElementById('back-to-main-from-users').addEventListener('click', () => goBack());
         document.getElementById('back-to-main-from-admin').addEventListener('click', () => goBack());
         document.getElementById('back-to-users-from-visit-profile').addEventListener('click', () => goBack());
