@@ -3467,7 +3467,6 @@
         const DEFAULT_PROFILE_COVER = "https://firebasestorage.googleapis.com/v0/b/stevest-sr.appspot.com/o/CHAT-ONLINE-ST%2Fdefault-cover.jpg?alt=media&token=7d07c51a-70ba-4a86-a0aa-243f3d54ef49";
         const STIA_NAME = 'STIA';
         const STIA_PROFILE_PIC = DEFAULT_PROFILE_PIC;
-        const pendingStiaPermissions = new Map();
         const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM";
         const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
 
@@ -4186,7 +4185,7 @@
         }
 
         async function stiaMuteUser(nickname, minutes, reason, messageKey) {
-            if (!nickname || nickname === 'STEVEST' || nickname === STIA_NAME) return;
+            if (!nickname || nickname === STIA_NAME) return;
             const duration = Math.max(parseInt(minutes, 10) || 15, 5);
             const mutedUntil = Date.now() + duration * 60 * 1000;
             try {
@@ -4219,7 +4218,7 @@
         }
 
         async function stiaBanUser(nickname, reason, messageKey) {
-            if (!nickname || nickname === 'STEVEST' || nickname === STIA_NAME) return;
+            if (!nickname || nickname === STIA_NAME) return;
             try {
                 await usersProfileRef.child(nickname).update({
                     isBanned: true,
@@ -4259,110 +4258,7 @@
             return normalized;
         }
 
-        function stiaDescribeDangerousAction(details = {}) {
-            const target = details.target || 'usuário';
-            const reason = details.reason ? ` Motivo: ${details.reason}` : '';
-            switch (details.action) {
-                case 'ban':
-                    return `banir ${target}.${reason}`;
-                case 'mute':
-                    return `mutar ${target} por ${details.duration || 30} minutos.${reason}`;
-                case 'warn':
-                    return `emitir alerta para ${target}.${reason}`;
-                case 'remove':
-                    return `remover a mensagem de ${target}.${reason}`;
-                default:
-                    return `executar ação crítica sobre ${target}.${reason}`;
-            }
-        }
-
-        function stiaGeneratePermissionId() {
-            return `STIA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        }
-
-        async function stiaRequestDangerousAction(details = {}) {
-            const requestId = stiaGeneratePermissionId();
-            const normalizedAction = stiaNormalizeAction(details.action);
-            const storedDetails = {
-                ...details,
-                action: normalizedAction || 'warn'
-            };
-            pendingStiaPermissions.set(requestId, storedDetails);
-            const description = stiaDescribeDangerousAction(storedDetails);
-            await stiaSendMessage(`⚠️ Pedido crítico ${requestId}: ${description} STEVEST, responda "autorizar ${requestId}" para permitir ou "cancelar ${requestId}" para negar.`);
-            return requestId;
-        }
-
-        async function stiaResolvePermission(requestId, approved) {
-            if (!requestId) return true;
-            const normalizedId = requestId.trim();
-            const details = pendingStiaPermissions.get(normalizedId);
-            if (!details) {
-                await stiaSendMessage(`Não encontrei o pedido crítico ${normalizedId}, STEVEST.`);
-                return true;
-            }
-
-            pendingStiaPermissions.delete(normalizedId);
-
-            if (!approved) {
-                await stiaSendMessage(`❌ Pedido crítico ${normalizedId} cancelado por STEVEST.`);
-                return true;
-            }
-
-            try {
-                switch (details.action) {
-                    case 'ban':
-                        await stiaBanUser(details.target, details.reason, details.messageKey);
-                        break;
-                    case 'mute':
-                        await stiaMuteUser(details.target, details.duration || 30, details.reason, details.messageKey);
-                        break;
-                    case 'warn':
-                        await stiaWarnUser(details.target, details.reason, details.messageKey, details.shouldRemove);
-                        break;
-                    case 'remove':
-                        if (details.messageKey) {
-                            await stiaRemoveMessage(details.messageKey);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-
-                if (details.shouldRemove && details.action !== 'remove' && details.messageKey) {
-                    await stiaRemoveMessage(details.messageKey);
-                }
-
-                await stiaSendMessage(`✅ Pedido crítico ${normalizedId} autorizado e executado.`);
-            } catch (error) {
-                console.error('STIA: erro ao executar ação autorizada.', error);
-                await stiaSendMessage(`⚠️ Tive um problema ao executar o pedido ${normalizedId}, STEVEST.`);
-            }
-
-            return true;
-        }
-
-        async function stiaProcessPermissionCommand(commandText) {
-            if (!commandText) return false;
-            const authorizeMatch = commandText.match(/(autorizar|aprovar)\s+(STIA-\d+-\d+)/i);
-            if (authorizeMatch) {
-                const requestId = (authorizeMatch[2] || authorizeMatch[1] || '').trim().toUpperCase();
-                return await stiaResolvePermission(requestId, true);
-            }
-
-            const cancelMatch = commandText.match(/(cancelar|negar|recusar)\s+(STIA-\d+-\d+)/i);
-            if (cancelMatch) {
-                const requestId = (cancelMatch[2] || cancelMatch[1] || '').trim().toUpperCase();
-                return await stiaResolvePermission(requestId, false);
-            }
-
-            return false;
-        }
-
         async function stiaHandleStevestCommand(commandText) {
-            if (await stiaProcessPermissionCommand(commandText)) {
-                return true;
-            }
             const prompt = `Você é STIA, a administradora do chat. Interprete o pedido do STEVEST a seguir e responda SOMENTE em JSON com o formato {"acao":"mensagem|alerta|mutar|banir|desbanir|desmutar|ignorar","alvo":"NOME OU VAZIO","duracaoMinutos":0,"mensagem":"texto para enviar ao chat"}. Pedido: "${commandText}"`;
             const response = await callStiaApi(prompt);
             const parsed = extractStiaJson(response);
@@ -4425,7 +4321,7 @@
 
         async function stiaModerateMessage(messageText, senderNickname, messageKey) {
             if (!messageText || !senderNickname) return;
-            if (senderNickname === STIA_NAME || senderNickname === 'STEVEST') return;
+            if (senderNickname === STIA_NAME) return;
 
             const prompt = `Você é STIA, guardiã das regras do chat. Analise a mensagem a seguir e responda em JSON no formato {"gravidade":"nenhuma|leve|moderada|grave","motivo":"texto","acaoSugerida":"ignorar|alerta|mutar|banir","duracaoMinutos":0,"removerMensagem":true|false}. Mensagem: "${messageText}".`;
             const response = await callStiaApi(prompt, 0.25);
@@ -4440,26 +4336,23 @@
 
             if (severity === 'nenhuma' || action === 'ignorar') return;
 
-            const isDangerous = severity === 'grave' || action === 'ban' || shouldRemove;
-            if (isDangerous) {
-                await stiaRequestDangerousAction({
-                    action: action === 'ignorar' ? 'warn' : action,
-                    target: senderNickname,
-                    reason,
-                    duration,
-                    messageKey,
-                    shouldRemove,
-                    severity
-                });
+            if (action === 'warn') {
+                await stiaWarnUser(senderNickname, reason, messageKey, shouldRemove);
                 return;
             }
 
-            if (action === 'warn') {
-                await stiaWarnUser(senderNickname, reason, messageKey, shouldRemove);
-            } else if (action === 'mute') {
+            if (action === 'mute') {
                 await stiaMuteUser(senderNickname, duration, reason, messageKey);
-            } else if (action === 'ban' || severity === 'grave') {
+                return;
+            }
+
+            if (action === 'ban' || severity === 'grave') {
                 await stiaBanUser(senderNickname, reason, messageKey);
+                return;
+            }
+
+            if (shouldRemove) {
+                await stiaRemoveMessage(messageKey);
             }
         }
 
