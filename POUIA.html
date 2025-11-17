@@ -550,12 +550,47 @@
 
     function detectarTipoCodigo(codigo = '') {
         const trimmed = codigo.trim();
-        if (!trimmed) return 'js';
-        if (/^<style/i.test(trimmed)) return 'css';
-        if (/^<script/i.test(trimmed)) return 'js';
-        if (/^</.test(trimmed)) return 'html';
-        const pareceCSS = /^[.#:@a-zA-Z]/.test(trimmed) && /\{[^}]+\}/.test(trimmed) && !/(function|=>|const|let|var)/.test(trimmed);
+        if (!trimmed) return 'desconhecido';
+        if (ehProvavelJson(trimmed)) return 'json';
+
+        const analisavel = removerComentariosIniciais(trimmed);
+        if (/^<style/i.test(analisavel)) return 'css';
+        if (/^<script/i.test(analisavel)) return 'js';
+        if (/^</.test(analisavel)) return 'html';
+
+        const pareceCSS = /^[.#:@a-zA-Z]/.test(analisavel) && /\{[^}]+\}/.test(analisavel) && !/(function|=>|const|let|var)/.test(analisavel);
         return pareceCSS ? 'css' : 'js';
+    }
+
+    function ehProvavelJson(texto = '') {
+        const trimmed = texto.trim();
+        if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) return false;
+        try {
+            JSON.parse(trimmed);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function removerComentariosIniciais(texto = '') {
+        let resultado = texto.trim();
+        const comentariosCssOuJs = /^\/\*[\s\S]*?\*\//;
+        const comentariosHtml = /^<!--([\s\S]*?)-->\s*/;
+
+        let mudou = true;
+        while (mudou) {
+            mudou = false;
+            if (comentariosCssOuJs.test(resultado)) {
+                resultado = resultado.replace(comentariosCssOuJs, '').trimStart();
+                mudou = true;
+            }
+            if (comentariosHtml.test(resultado)) {
+                resultado = resultado.replace(comentariosHtml, '').trimStart();
+                mudou = true;
+            }
+        }
+        return resultado.trimStart();
     }
 
     function removerTagsStyle(codigo = '') {
@@ -585,6 +620,18 @@
         try {
             const tipo = detectarTipoCodigo(registro.codigo);
             limparEvolucaoVisual();
+
+            if (tipo === 'json') {
+                console.warn('Evolução ignorada: código recebido parece ser apenas um JSON, nada para executar.', registro);
+                atualizarStatusEvolucao('Recebi um pacote de ideias, mas sem código executável. Consulte o histórico acima.', false);
+                return;
+            }
+
+            if (tipo === 'desconhecido') {
+                console.warn('Evolução ignorada: não consegui identificar o tipo do código.', registro);
+                atualizarStatusEvolucao('O último registro não trouxe um trecho HTML/CSS/JS válido para aplicar ao vivo.', false);
+                return;
+            }
 
             if (tipo === 'css') {
                 const style = document.createElement('style');
