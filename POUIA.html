@@ -123,6 +123,27 @@
         border-radius: 9999px;
     }
 
+    /* Canvas visual para mostrar HTML aplicado nas evoluções */
+    #canvas-evolutivo {
+        min-height: 90px;
+        transition: all 0.4s ease-in-out;
+    }
+
+    /* Efeito de brilho durante a evolução em tempo real */
+    #corpo-pou.evoluindo {
+        animation: glowEvolucao 1.2s ease-in-out infinite alternate;
+        box-shadow: 0 0 25px rgba(250, 204, 21, 0.6);
+    }
+
+    @keyframes glowEvolucao {
+        0% {
+            filter: drop-shadow(0 0 5px rgba(250, 204, 21, 0.2));
+        }
+        100% {
+            filter: drop-shadow(0 0 25px rgba(250, 204, 21, 0.8));
+        }
+    }
+
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -200,9 +221,13 @@
           Evoluir
         </button>
       </div>
-      <p class="text-sm text-gray-300 mb-2" id="status-evolucao">Pronto para criar novas ideias.</p>
+      <p class="text-sm text-gray-300 mb-1" id="status-evolucao">Pronto para criar novas ideias.</p>
+      <p class="text-xs text-green-300 hidden mb-3" id="indicador-visual">Aplicando ao vivo...</p>
       <div id="lista-evolucoes" class="space-y-3 pr-2 text-sm text-yellow-50">
         <!-- Logs persistidos aparecerão aqui -->
+      </div>
+      <div id="canvas-evolutivo" class="mt-4 rounded-2xl border border-yellow-500/20 bg-gray-900/60 p-3 text-[11px] text-yellow-100">
+        <p class="text-yellow-200 text-xs">As evoluções HTML aparecerão aqui em tempo real.</p>
       </div>
     </div>
 
@@ -224,6 +249,7 @@
 
     // --- Referências aos Elementos ---
     const containerPou = document.getElementById('container-pou');
+    const corpoPou = document.getElementById('corpo-pou');
     const bocaPou = document.getElementById('boca-pou');
     const olhos = document.querySelectorAll('.pou-eye');
     const pupilas = [document.getElementById('pupila-e'), document.getElementById('pupila-d')];
@@ -236,7 +262,12 @@
     const listaEvolucoes = document.getElementById('lista-evolucoes');
     const statusEvolucao = document.getElementById('status-evolucao');
     const botaoEvoluir = document.getElementById('botao-evoluir');
+    const indicadorVisual = document.getElementById('indicador-visual');
+    const canvasEvolutivo = document.getElementById('canvas-evolutivo');
+    const conteudoCanvasInicial = canvasEvolutivo ? canvasEvolutivo.innerHTML : '';
     let bolhaTimer = null; // Timer para esconder a bolha de fala
+    let indicadorVisualTimer = null;
+    let animacaoEvolucaoTimer = null;
 
     // --- Configuração da IA (Seguindo as diretrizes) ---
     const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM"; // Chave da API (deixe em branco, será gerenciado pelo ambiente)
@@ -250,6 +281,9 @@
     let evolucaoEmAndamento = false;
     let ultimaEvolucao = null; // Mantém referência ao último bloco de código gerado
     const evolucaoRef = database.ref('pouEvolucao');
+    let idUltimaEvolucaoAplicada = null;
+    let elementoEvolucaoAtivo = null;
+    let tipoEvolucaoAtiva = null;
 
     /**
      * Move as pupilas do Pou seguindo o cursor/touch.
@@ -483,14 +517,19 @@
         if (!listaEvolucoes) return;
         if (!registros.length) {
             listaEvolucoes.innerHTML = '<p class="text-gray-300 text-sm">Sem evoluções ainda. Clique em "Evoluir" para começar.</p>';
+            limparEvolucaoVisual();
+            idUltimaEvolucaoAplicada = null;
             return;
         }
+
+        const idMaisRecente = registros[registros.length - 1]?.id;
 
         listaEvolucoes.innerHTML = registros.map(registro => {
             const origem = registro.origem === 'auto' ? 'Autônomo' : 'Manual';
             const data = registro.timestamp ? formatarData(registro.timestamp) : 'Agora';
+            const ativo = registro.id === idMaisRecente;
             return `
-              <div class="bg-gray-900/60 p-3 rounded-2xl border border-yellow-500/20">
+              <div class="bg-gray-900/60 p-3 rounded-2xl border ${ativo ? 'border-yellow-300/70 shadow-lg shadow-yellow-500/30 scale-[1.01]' : 'border-yellow-500/20'} transition duration-300 transform">
                 <div class="flex justify-between text-[10px] text-yellow-100/80">
                   <span>${origem}</span>
                   <span>${data}</span>
@@ -501,6 +540,102 @@
               </div>
             `;
         }).join('');
+
+        const registroAtual = registros[registros.length - 1];
+        if (registroAtual && registroAtual.id !== idUltimaEvolucaoAplicada) {
+            idUltimaEvolucaoAplicada = registroAtual.id;
+            aplicarEvolucaoVisual(registroAtual);
+        }
+    }
+
+    function detectarTipoCodigo(codigo = '') {
+        const trimmed = codigo.trim();
+        if (!trimmed) return 'js';
+        if (/^<style/i.test(trimmed)) return 'css';
+        if (/^<script/i.test(trimmed)) return 'js';
+        if (/^</.test(trimmed)) return 'html';
+        const pareceCSS = /^[.#:@a-zA-Z]/.test(trimmed) && /\{[^}]+\}/.test(trimmed) && !/(function|=>|const|let|var)/.test(trimmed);
+        return pareceCSS ? 'css' : 'js';
+    }
+
+    function removerTagsStyle(codigo = '') {
+        return codigo.replace(/<\/?style[^>]*>/gi, '').trim();
+    }
+
+    function limparEvolucaoVisual() {
+        if ((tipoEvolucaoAtiva === 'css' || tipoEvolucaoAtiva === 'js') && elementoEvolucaoAtivo && elementoEvolucaoAtivo.parentNode) {
+            elementoEvolucaoAtivo.parentNode.removeChild(elementoEvolucaoAtivo);
+        }
+        if (tipoEvolucaoAtiva === 'html' && canvasEvolutivo) {
+            canvasEvolutivo.innerHTML = conteudoCanvasInicial;
+        }
+        if (canvasEvolutivo) {
+            canvasEvolutivo.classList.remove('ring-2', 'ring-yellow-300/60', 'shadow', 'shadow-yellow-500/20');
+        }
+        elementoEvolucaoAtivo = null;
+        tipoEvolucaoAtiva = null;
+        esconderIndicadorVisual();
+        if (corpoPou) {
+            corpoPou.classList.remove('evoluindo');
+        }
+    }
+
+    function aplicarEvolucaoVisual(registro) {
+        if (!registro || !registro.codigo) return;
+        try {
+            const tipo = detectarTipoCodigo(registro.codigo);
+            limparEvolucaoVisual();
+
+            if (tipo === 'css') {
+                const style = document.createElement('style');
+                style.dataset.evolucaoPou = registro.id || Date.now();
+                style.textContent = removerTagsStyle(registro.codigo);
+                document.head.appendChild(style);
+                elementoEvolucaoAtivo = style;
+            } else if (tipo === 'html') {
+                if (canvasEvolutivo) {
+                    canvasEvolutivo.innerHTML = registro.codigo;
+                    canvasEvolutivo.classList.add('ring-2', 'ring-yellow-300/60', 'shadow', 'shadow-yellow-500/20');
+                }
+            } else {
+                const script = document.createElement('script');
+                script.type = 'module';
+                script.textContent = registro.codigo;
+                document.body.appendChild(script);
+                elementoEvolucaoAtivo = script;
+            }
+
+            tipoEvolucaoAtiva = tipo;
+            animarEvolucaoVisual();
+            const mensagem = `Aplicando ao vivo: ${registro.ideia || 'Nova evolução'}`;
+            atualizarStatusEvolucao(mensagem, true);
+            mostrarIndicadorVisual(mensagem);
+        } catch (error) {
+            console.error('Falha ao aplicar evolução visual:', error);
+            atualizarStatusEvolucao('A evolução foi salva, mas não consegui aplicá-la agora.', false);
+        }
+    }
+
+    function animarEvolucaoVisual() {
+        if (!corpoPou) return;
+        corpoPou.classList.add('evoluindo');
+        clearTimeout(animacaoEvolucaoTimer);
+        animacaoEvolucaoTimer = setTimeout(() => corpoPou.classList.remove('evoluindo'), 4000);
+    }
+
+    function mostrarIndicadorVisual(texto) {
+        if (!indicadorVisual) return;
+        indicadorVisual.textContent = texto;
+        indicadorVisual.classList.remove('hidden');
+        indicadorVisual.classList.add('animate-pulse');
+        clearTimeout(indicadorVisualTimer);
+        indicadorVisualTimer = setTimeout(esconderIndicadorVisual, 6000);
+    }
+
+    function esconderIndicadorVisual() {
+        if (!indicadorVisual) return;
+        indicadorVisual.classList.add('hidden');
+        indicadorVisual.classList.remove('animate-pulse');
     }
 
     function formatarData(timestamp) {
