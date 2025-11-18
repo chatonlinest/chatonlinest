@@ -1162,12 +1162,12 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
         }
 
         // Função para obter ícone e extensão do arquivo
-        function getFileInfo(language) {
-            const langLower = language.toLowerCase();
+        function getFileInfo(language, content = '') {
+            const langLower = (language || '').toLowerCase();
             const map = {
                 'javascript': { icon: 'fab fa-js-square', name: 'script.js', ext: 'js' }, 'js': { icon: 'fab fa-js-square', name: 'script.js', ext: 'js' },
                 'python': { icon: 'fab fa-python', name: 'app.py', ext: 'py' }, 'py': { icon: 'fab fa-python', name: 'app.py', ext: 'py' },
-                'html': { icon: 'fab fa-html5', name: 'index.html', ext: 'html' },
+                'html': { icon: 'fab fa-html5', name: 'index.html', ext: 'html' }, 'htm': { icon: 'fab fa-html5', name: 'index.html', ext: 'html' },
                 'css': { icon: 'fab fa-css3-alt', name: 'style.css', ext: 'css' },
                 'json': { icon: 'fas fa-file-code', name: 'data.json', ext: 'json' },
                 'xml': { icon: 'fas fa-file-code', name: 'data.xml', ext: 'xml' },
@@ -1177,7 +1177,16 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
                 'sql': { icon: 'fas fa-database', name: 'query.sql', ext: 'sql' },
                 'bash': { icon: 'fas fa-terminal', name: 'script.sh', ext: 'sh' }, 'shell': { icon: 'fas fa-terminal', name: 'script.sh', ext: 'sh' },
             };
-            return map[langLower] || { icon: 'fas fa-file-code', name: `code.txt`, ext: 'txt' };
+            if (map[langLower]) {
+                return map[langLower];
+            }
+
+            const snippet = (content || '').trim();
+            if (/<!DOCTYPE\s+html>/i.test(snippet) || /<html[\s>]/i.test(snippet)) {
+                return map['html'];
+            }
+
+            return { icon: 'fas fa-file-code', name: `code.txt`, ext: 'txt' };
         }
 
         function formatarMarkdown(texto) {
@@ -1219,7 +1228,7 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
                 
                 textoProcessado = textoProcessado.replace(/```(\w*)\s*([\s\S]*?)```/gi, (match, lang, codeContent) => {
                     const id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    const fileInfo = getFileInfo(lang);
+                    const fileInfo = getFileInfo(lang, codeContent);
                     blocosDeCodigo.push({ id, lang, content: codeContent, fileInfo });
                     return `__CODE_BLOCK_${id}__`;
                 });
@@ -1383,7 +1392,7 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
             let textoProcessado = texto;
             textoProcessado = textoProcessado.replace(/```(\w*)\s*([\s\S]*?)```/gi, (match, lang, codeContent) => {
                 const id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                const fileInfo = getFileInfo(lang);
+                const fileInfo = getFileInfo(lang, codeContent);
                 blocosDeCodigo.push({ id, lang, content: codeContent, fileInfo });
                 return `__CODE_BLOCK_${id}__`;
             });
