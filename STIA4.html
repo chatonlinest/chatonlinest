@@ -1161,6 +1161,36 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
             }
         }
 
+        // Detecta linguagem com base no conteúdo do bloco quando não especificada
+        function detectarLinguagemPorConteudo(codeContent = '') {
+            const trimmed = codeContent.trim();
+            if (/<!DOCTYPE html>|<html[\s>]/i.test(trimmed) || /<head[\s>]|<body[\s>]/i.test(trimmed)) {
+                return 'html';
+            }
+            if (/^\s*<style[\s>]/i.test(trimmed) || /{\s*[\r\n]/.test(trimmed) && /\.[\w-]+\s*\{/.test(trimmed)) {
+                return 'css';
+            }
+            if (/^\s*<script[\s>]/i.test(trimmed) || /function\s+\w+\s*\(/.test(trimmed) || /const\s+\w+\s*=/.test(trimmed)) {
+                return 'javascript';
+            }
+            if (/^\s*(class|def)\s+\w+/m.test(trimmed)) {
+                return 'python';
+            }
+            if (/^\s*#include\s+</m.test(trimmed)) {
+                return 'cpp';
+            }
+            if (/^\s*package\s+|^\s*import\s+java\./m.test(trimmed)) {
+                return 'java';
+            }
+            return 'plaintext';
+        }
+
+        function normalizarLinguagem(lang, codeContent) {
+            const cleaned = (lang || '').trim().toLowerCase();
+            if (cleaned) return cleaned;
+            return detectarLinguagemPorConteudo(codeContent);
+        }
+
         // Função para obter ícone e extensão do arquivo
         function getFileInfo(language) {
             const langLower = language.toLowerCase();
@@ -1178,6 +1208,37 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
                 'bash': { icon: 'fas fa-terminal', name: 'script.sh', ext: 'sh' }, 'shell': { icon: 'fas fa-terminal', name: 'script.sh', ext: 'sh' },
             };
             return map[langLower] || { icon: 'fas fa-file-code', name: `code.txt`, ext: 'txt' };
+        }
+
+        function processarCodigoDaMensagem(texto) {
+            const blocosDeCodigo = [];
+            const arquivosMapeados = new Map();
+
+            const textoProcessado = texto.replace(/```(\w*)\s*([\s\S]*?)```/gi, (match, lang, codeContent) => {
+                const linguagemNormalizada = normalizarLinguagem(lang, codeContent);
+                const fileInfo = getFileInfo(linguagemNormalizada);
+                const fileKey = `${fileInfo.name.toLowerCase()}|${fileInfo.ext}`;
+                let blocoReferencia;
+                const deveMesclar = (!lang || !lang.trim()) && arquivosMapeados.has(fileKey);
+
+                if (deveMesclar) {
+                    blocoReferencia = arquivosMapeados.get(fileKey);
+                    blocoReferencia.content += `\n${codeContent}`;
+                } else {
+                    blocoReferencia = {
+                        id: `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        lang: linguagemNormalizada,
+                        content: codeContent,
+                        fileInfo
+                    };
+                    arquivosMapeados.set(fileKey, blocoReferencia);
+                    blocosDeCodigo.push(blocoReferencia);
+                }
+
+                return `__CODE_BLOCK_${blocoReferencia.id}__`;
+            });
+
+            return { textoProcessado, blocosDeCodigo };
         }
 
         function formatarMarkdown(texto) {
@@ -1214,18 +1275,10 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
             
             if (remetente === 'bot') {
                 // Processa o texto para lidar com blocos de código
-                const blocosDeCodigo = [];
-                let textoProcessado = texto;
-                
-                textoProcessado = textoProcessado.replace(/```(\w*)\s*([\s\S]*?)```/gi, (match, lang, codeContent) => {
-                    const id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    const fileInfo = getFileInfo(lang);
-                    blocosDeCodigo.push({ id, lang, content: codeContent, fileInfo });
-                    return `__CODE_BLOCK_${id}__`;
-                });
-                
+                const { textoProcessado, blocosDeCodigo } = processarCodigoDaMensagem(texto);
+
                 const paragrafos = textoProcessado.split('\n\n');
-                
+
                 paragrafos.forEach(paragrafo => {
                     if (paragrafo.includes('__CODE_BLOCK_')) {
                         blocosDeCodigo.forEach(bloco => {
@@ -1379,14 +1432,7 @@ REGRAS ESPECÍFICAS PARA CÓDIGO:
             const velocidadePausa = 300;
             animacaoDeDigitarAtiva = true;
             
-            const blocosDeCodigo = [];
-            let textoProcessado = texto;
-            textoProcessado = textoProcessado.replace(/```(\w*)\s*([\s\S]*?)```/gi, (match, lang, codeContent) => {
-                const id = `code-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                const fileInfo = getFileInfo(lang);
-                blocosDeCodigo.push({ id, lang, content: codeContent, fileInfo });
-                return `__CODE_BLOCK_${id}__`;
-            });
+            const { textoProcessado, blocosDeCodigo } = processarCodigoDaMensagem(texto);
             
             const paragrafos = textoProcessado.split('\n\n');
             for (let i = 0; i < paragrafos.length; i++) {
