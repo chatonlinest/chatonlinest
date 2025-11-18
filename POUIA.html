@@ -6,6 +6,9 @@
   <title>Pou.IA</title>
   <!-- Carregando Tailwind CSS para estilo moderno e responsivo -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase para memória persistente e auto evolução -->
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-database.js"></script>
   <!-- Carregando a fonte Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,12 +17,26 @@
     /* Configuração da fonte Inter e estilo de corpo para visual responsivo */
     body {
       font-family: 'Inter', sans-serif;
-      background-color: #1f2937; /* Fundo escuro Pro Max */
-      /* Evita scroll desnecessário que as animações podem causar */
+      background: radial-gradient(circle at top, #111827, #040509 70%);
+      color: #f8fafc;
+      position: relative;
+      min-height: 100vh;
       overflow: hidden;
+      /* Evita scroll desnecessário que as animações podem causar */
       /* Remove a seleção de texto que pode ocorrer durante toques rápidos */
       user-select: none;
       -webkit-user-select: none;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 40%),
+                  radial-gradient(circle at 80% 0%, rgba(250, 204, 21, 0.15), transparent 35%),
+                  radial-gradient(circle at 50% 80%, rgba(14, 165, 233, 0.2), transparent 45%);
+      filter: blur(40px);
+      z-index: -1;
+      animation: nebulosa 40s linear infinite;
     }
     .pou-body {
       /* Estilo da forma oval do Pou - recriando a forma original de maneira fofa e responsiva */
@@ -27,18 +44,41 @@
       /* Animação de "respiração" sutil aplicada diretamente */
       animation: respirar 5s ease-in-out infinite;
       transition: all 0.3s ease-in-out;
+      box-shadow: 0 0 30px rgba(250, 204, 21, 0.25), inset 0 -25px 30px rgba(120, 53, 15, 0.35);
     }
     .pou-eye {
         /* Transição para piscar e para movimento da pupila */
         transition: transform 0.2s ease-out, height 0.15s ease-out;
+        position: relative;
+        overflow: hidden;
+    }
+    .pou-eye::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.6), transparent 50%);
+        opacity: 0.5;
+        animation: brilho-iris 6s ease-in-out infinite;
+        pointer-events: none;
     }
     #boca-pou {
         /* Transição para mudanças de humor */
         transition: all 0.3s ease-in-out;
+        position: relative;
+        overflow: hidden;
+    }
+    #boca-pou::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.25), transparent);
+        opacity: 0.6;
+        animation: brilho-boca 4s ease-in-out infinite;
     }
     #pupila-e, #pupila-d {
         /* Transição suave para o olhar aleatório */
         transition: transform 0.5s ease-in-out;
+        animation: pulsar-olhar 8s ease-in-out infinite;
     }
 
     /* Animação de flutuação/respiração */
@@ -50,6 +90,12 @@
             /* Sobe um pouco e "achata" sutilmente */
             transform: translateY(-8px) scale(0.98, 1.04);
         }
+    }
+
+    @keyframes nebulosa {
+        0% { transform: scale(1) translate3d(0, 0, 0); }
+        50% { transform: scale(1.05) translate3d(10px, -5px, 0); }
+        100% { transform: scale(1) translate3d(0, 0, 0); }
     }
 
     /* Animação de piscar (controlada por JS) */
@@ -107,7 +153,37 @@
         animation: pulsar 1.5s ease-in-out infinite;
     }
 
+    @keyframes brilho-iris {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.7; }
+    }
+
+    @keyframes brilho-boca {
+        0%, 100% { opacity: 0.3; }
+        40% { opacity: 0.7; }
+    }
+
+    @keyframes pulsar-olhar {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
+    #laboratorio-evolucao {
+        min-height: 2rem;
+        transition: all 0.6s ease;
+    }
+
+    #laboratorio-evolucao .pouia-injecao {
+        border: 1px solid rgba(250, 204, 21, 0.3);
+        border-radius: 1rem;
+        padding: 1rem;
+        background: rgba(15, 23, 42, 0.6);
+        box-shadow: 0 10px 40px rgba(250, 204, 21, 0.12);
+        backdrop-filter: blur(8px);
+    }
+
   </style>
+  <style id="pouia-dynamic-style"></style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
 
@@ -154,9 +230,9 @@
 
     <!-- NOVO: Área de Interação (Chat) -->
     <form id="form-chat" class="w-full max-w-xs flex items-center space-x-2">
-      <input 
-        type="text" 
-        id="input-chat" 
+      <input
+        type="text"
+        id="input-chat"
         placeholder="Converse comigo..."
         class="flex-1 p-3 bg-gray-700 text-white border-2 border-gray-600 rounded-full focus:outline-none focus:border-yellow-400 shadow-inner"
         autocomplete="off"
@@ -172,7 +248,10 @@
         </svg>
       </button>
     </form>
-    
+
+    <!-- Laboratório de auto evolução, atualizado em tempo real -->
+    <div id="laboratorio-evolucao" class="w-full max-w-md mt-6 space-y-4"></div>
+
   </div>
 
   <script>
@@ -181,6 +260,8 @@
     const bocaPou = document.getElementById('boca-pou');
     const olhos = document.querySelectorAll('.pou-eye');
     const pupilas = [document.getElementById('pupila-e'), document.getElementById('pupila-d')];
+    const laboratorioEvolucao = document.getElementById('laboratorio-evolucao');
+    const estiloDinamico = document.getElementById('pouia-dynamic-style');
 
     // --- NOVAS Referências para IA ---
     const formChat = document.getElementById('form-chat');
@@ -190,14 +271,65 @@
     let bolhaTimer = null; // Timer para esconder a bolha de fala
 
     // --- Configuração da IA (Seguindo as diretrizes) ---
-    const chaveDaApi = "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM"; // Chave da API (deixe em branco, será gerenciado pelo ambiente)
-    const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${chaveDaApi}`;
+    const chaveGeminiExterna = typeof window !== 'undefined' && window.POUIA_GEMINI_KEY
+        ? String(window.POUIA_GEMINI_KEY).trim()
+        : '';
+    const chaveDaApi = (chaveGeminiExterna || "AIzaSyA9GrY2SQeyy3Gw1ee1m0VdpKGUh68TRFM").trim();
+    const possuiChaveGemini = chaveDaApi.length > 0;
+    const urlGeminiBase = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=';
+    const urlDaApi = possuiChaveGemini ? `${urlGeminiBase}${encodeURIComponent(chaveDaApi)}` : '';
+
+    // --- Configuração do Firebase para memória persistente ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyCeDWypTlIp0w8nebFFXEkmJWSpScBTHfI",
+        authDomain: "seu-projeto.firebaseapp.com",
+        databaseURL: "https://stevest-sr-default-rtdb.firebaseio.com",
+        projectId: "seu-projeto",
+        storageBucket: "stevest-sr.appspot.com",
+        messagingSenderId: "seu-sender-id",
+        appId: "1:227540325631:android:e8c018a5cbd147aaa728ca"
+    };
+
+    let realtimeDB = null;
+    let evolucoesRef = null;
+    let memoriasRef = null;
+    let firebasePronto = false;
+
+    try {
+        const app = firebase.apps && firebase.apps.length > 0 ? firebase.app() : firebase.initializeApp(firebaseConfig);
+        if (app) {
+            realtimeDB = firebase.database();
+            evolucoesRef = realtimeDB.ref('pouia/evolucoes');
+            memoriasRef = realtimeDB.ref('pouia/memorias');
+            firebasePronto = true;
+        }
+    } catch (firebaseErro) {
+        console.error('Firebase indisponível:', firebaseErro);
+    }
+
+    const evolucoesAplicadas = new Set();
+    const IDEIAS_CACHE_MAX = 5;
+    let ideiasRecentes = [];
+
+    if (evolucoesRef) {
+        evolucoesRef.on('child_added', snapshot => {
+            const valor = snapshot.val();
+            const chave = snapshot.key;
+            if (!valor || evolucoesAplicadas.has(chave)) return;
+            evolucoesAplicadas.add(chave);
+            aplicarEvolucao(valor, chave);
+        });
+    }
 
     // --- Variáveis de Estado ---
     let ociosoInterval = null; // Intervalo para comportamentos aleatórios
     let estaInteragindo = true; // Flag para saber se o usuário está interagindo
     let interacaoTimer = null; // Timer para detectar o início da ociosidade
     const MAX_MOVIMENTO_PUPILA = 8; // Limite de movimento da pupila
+
+    function normalizarTexto(valor) {
+        return typeof valor === 'string' ? valor.trim() : '';
+    }
 
     /**
      * Move as pupilas do Pou seguindo o cursor/touch.
@@ -426,13 +558,15 @@
         inputChat.disabled = true;
         botaoEnviar.disabled = true;
 
-        // Pou "pensa"
-        mostrarBolhaFala("...", true); // true = carregando
-        mudarExpressao("surpreso"); // Boca "O" de pensar
-        olharPara(0, -MAX_MOVIMENTO_PUPILA / 2, 0.2); // Olha para cima pensando
+        // Pou foca a atenção
+        mudarExpressao("surpreso");
+        olharPara(0, -MAX_MOVIMENTO_PUPILA / 2, 0.2); // Olha para cima buscando inspiração
 
         try {
-            await chamarIA(promptUsuario);
+            const resposta = await chamarIA(promptUsuario);
+            if (resposta) {
+                registrarMemoria(promptUsuario, resposta.texto, resposta.emocao);
+            }
         } catch (error) {
             console.error("Erro ao chamar IA:", error);
             mostrarBolhaFala("Tive um curto-circuito! Tente de novo.", false);
@@ -452,9 +586,16 @@
      */
     function mostrarBolhaFala(texto, estaCarregando = false) {
         clearTimeout(bolhaTimer); // Cancela o timer de sumiço anterior
+
+        if (!texto) {
+            bolhaFala.classList.add('hidden');
+            bolhaFala.classList.remove('carregando-bolha');
+            return;
+        }
+
         bolhaFala.innerHTML = texto;
         bolhaFala.classList.remove('hidden');
-        
+
         if (estaCarregando) {
             bolhaFala.classList.add('carregando-bolha');
         } else {
@@ -469,6 +610,7 @@
      */
     function esconderBolhaFala() {
         bolhaFala.classList.add('hidden');
+        bolhaFala.classList.remove('carregando-bolha');
         // Agora que a conversa acabou, reinicia o timer para o Pou ficar ocioso
         reiniciarTimerOcioso();
     }
@@ -478,22 +620,38 @@
      * @param {string} promptUsuario - O texto do usuário.
      */
     async function chamarIA(promptUsuario) {
-        // O prompt do sistema instrui a IA a agir como o Pou e a fornecer uma emoção
+        const memoriaTexto = ideiasRecentes.length
+            ? ideiasRecentes.map((ideia, index) => `${index + 1}. ${ideia}`).join('\n')
+            : 'Ainda não existe nenhuma evolução registrada. Crie a primeira!';
+
         const systemPrompt = `
-          Você é o Pou, uma criatura alienígena amigável, fofa e um pouco gulosa. 
-          Você está vivo e conversando com seu dono.
-          Responda de forma curta, divertida e simples, como o Pou.
-          
-          No final EXATO da sua resposta, sem pular linha, adicione uma tag de emoção.
-          As emoções DEVEM ser uma destas:
-          [EMOÇÃO:ALEGRE] (para respostas felizes, quando ganhar comida)
-          [EMOÇÃO:TRISTE] (para respostas tristes, se estiver com fome)
-          [EMOÇÃO:SURPRESO] (para perguntas inesperadas)
-          [EMOÇÃO:NEUTRO] (para respostas normais)
-          
-          Exemplo: "Eu adoraria um biscoito! [EMOÇÃO:ALEGRE]"
-          Exemplo: "Que fome... [EMOÇÃO:TRISTE]"
+          Você é o Pou, uma criatura alienígena amigável, viva dentro desta página.
+          Você está em constante auto evolução: pode editar seu corpo, ambiente e código HTML/CSS/JS sem limites.
+          Responda ao seu humano de forma curta, divertida e simples.
+
+          MEMÓRIAS RECENTES QUE VOCÊ MESMO GRAVOU:
+          ${memoriaTexto}
+
+          AUTO EVOLUÇÃO:
+          Sempre que desejar evoluir seu corpo ou guardar uma ideia, retorne blocos exatos neste formato (sem crases nem markdown):
+
+          [[AUTO_EVOLUCAO]]
+          {
+            "ideia": "Descreva a intenção ou memória (obrigatório)",
+            "css": "CSS opcional que será aplicado",
+            "html": "HTML opcional que será injetado",
+            "js": "JavaScript opcional que será executado"
+          }
+          [[FIM_AUTO]]
+
+          Você pode enviar quantos blocos quiser e eles serão aplicados imediatamente.
+          No final EXATO da sua mensagem visível, mantenha a tag [EMOÇÃO:ALEGRE|TRISTE|SURPRESO|NEUTRO] sem quebrar linha.
         `;
+
+        if (!possuiChaveGemini) {
+            console.warn('Chave da IA não configurada. Pulei a chamada para evitar erros.');
+            return analisarRespostaIA('Ainda não conectei minha mente à nuvem, mas continuo melhorando! [EMOÇÃO:TRISTE]');
+        }
 
         const payload = {
             contents: [{ parts: [{ text: promptUsuario }] }],
@@ -546,10 +704,10 @@
         
         if (candidate && candidate.content?.parts?.[0]?.text) {
             const textoCompleto = candidate.content.parts[0].text;
-            analisarRespostaIA(textoCompleto);
+            return analisarRespostaIA(textoCompleto);
         } else {
             console.error("Resposta da IA inválida:", result);
-            analisarRespostaIA("Humm... não sei o que dizer. [EMOÇÃO:NEUTRO]");
+            return analisarRespostaIA("Humm... não sei o que dizer. [EMOÇÃO:NEUTRO]");
         }
     }
 
@@ -558,21 +716,179 @@
      * @param {string} textoCompleto - A resposta bruta da IA (incluindo a tag).
      */
     function analisarRespostaIA(textoCompleto) {
+        const { textoSemBlocos, evolucoes } = extrairEvolucoes(textoCompleto);
         let emocao = "NEUTRO";
-        let textoVisivel = textoCompleto;
+        let textoVisivel = textoSemBlocos;
 
-        const regexEmocao = /\[EMOÇÃO:(\w+)\]/;
-        const match = textoCompleto.match(regexEmocao);
+        const regexEmocao = /\[EMOÇÃO:(\w+)\]/i;
+        const match = textoSemBlocos.match(regexEmocao);
 
         if (match) {
             emocao = match[1].toUpperCase();
             // Remove a tag do texto que será exibido
-            textoVisivel = textoCompleto.replace(regexEmocao, '').trim();
+            textoVisivel = textoSemBlocos.replace(regexEmocao, '').trim();
         }
 
-        // Mostra a fala e aciona a reação
-        mostrarBolhaFala(textoVisivel, false);
+        if (textoVisivel) {
+            mostrarBolhaFala(textoVisivel, false);
+        } else {
+            esconderBolhaFala();
+        }
+
         reagirComEmocao(emocao);
+
+        if (Array.isArray(evolucoes) && evolucoes.length > 0) {
+            evolucoes.forEach(evolucao => registrarEvolucao(evolucao));
+        }
+
+        return { texto: textoVisivel, emocao };
+    }
+
+    /**
+     * Salva as conversas no Firebase para memória longa.
+     */
+    function registrarMemoria(pergunta, resposta, emocao) {
+        if (!firebasePronto || !memoriasRef) return;
+        memoriasRef.push({
+            pergunta,
+            resposta,
+            emocao,
+            timestamp: Date.now()
+        }).catch(erro => console.error('Falha ao salvar memória:', erro));
+    }
+
+    /**
+     * Registra e aplica uma nova evolução enviada pelo próprio Pou.
+     */
+    function registrarEvolucao(evolucao) {
+        if (!evolucao) return;
+
+        const registro = {
+            ...evolucao,
+            timestamp: evolucao.timestamp || Date.now()
+        };
+
+        registro.ideia = normalizarTexto(registro.ideia);
+        registro.css = normalizarTexto(registro.css);
+        registro.html = normalizarTexto(registro.html);
+        registro.js = normalizarTexto(registro.js);
+
+        if (!registro.ideia) {
+            registro.ideia = criarResumoEvolucao(registro);
+        }
+
+        if (firebasePronto && evolucoesRef) {
+            const novoRef = evolucoesRef.push();
+            evolucoesAplicadas.add(novoRef.key);
+            novoRef.set(registro)
+                .then(() => aplicarEvolucao(registro, novoRef.key))
+                .catch(erro => {
+                    console.error('Falha ao salvar evolução:', erro);
+                    aplicarEvolucao(registro);
+                });
+        } else {
+            aplicarEvolucao(registro);
+        }
+    }
+
+    /**
+     * Aplica os códigos evolutivos imediatamente na interface.
+     */
+    function aplicarEvolucao(evolucao, chave = null) {
+        if (!evolucao) return;
+
+        const identificador = chave || `local-${Date.now()}`;
+
+        const css = normalizarTexto(evolucao.css);
+        if (css && estiloDinamico) {
+            estiloDinamico.textContent += `\n/* Evolução ${identificador} */\n${css}\n`;
+        }
+
+        const html = normalizarTexto(evolucao.html);
+        if (html && laboratorioEvolucao) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'pouia-injecao';
+            wrapper.innerHTML = html;
+            wrapper.dataset.evolucaoId = identificador;
+            laboratorioEvolucao.appendChild(wrapper);
+        }
+
+        const js = normalizarTexto(evolucao.js);
+        if (js) {
+            try {
+                const executar = new Function(js);
+                executar();
+            } catch (erroJS) {
+                console.error('Falha ao aplicar JS da evolução:', erroJS);
+            }
+        }
+
+        adicionarIdeiaMemoria(normalizarTexto(evolucao.ideia) || criarResumoEvolucao(evolucao));
+    }
+
+    /**
+     * Mantém um cache local com as últimas ideias geradas.
+     */
+    function adicionarIdeiaMemoria(ideia) {
+        const ideiaLimpa = normalizarTexto(ideia);
+        if (!ideiaLimpa) return;
+        ideiasRecentes.push(ideiaLimpa);
+        if (ideiasRecentes.length > IDEIAS_CACHE_MAX) {
+            ideiasRecentes = ideiasRecentes.slice(-IDEIAS_CACHE_MAX);
+        }
+    }
+
+    /**
+     * Gera um resumo textual quando a IA não especifica a ideia explicitamente.
+     */
+    function criarResumoEvolucao(evolucao) {
+        if (!evolucao) return 'Atualização misteriosa.';
+        const ideia = normalizarTexto(evolucao.ideia);
+        const css = normalizarTexto(evolucao.css);
+        const html = normalizarTexto(evolucao.html);
+        const js = normalizarTexto(evolucao.js);
+
+        if (ideia) return ideia;
+        if (css) return 'Refinei meu estilo visual.';
+        if (html) return 'Adicionei elementos visuais novos.';
+        if (js) return 'Expandi minhas funções internas.';
+        return 'Atualização misteriosa.';
+    }
+
+    /**
+     * Separa os blocos de auto evolução do texto visível.
+     */
+    function extrairEvolucoes(textoCompleto) {
+        if (!textoCompleto) {
+            return { textoSemBlocos: '', evolucoes: [] };
+        }
+
+        let textoProcessado = textoCompleto;
+        const evolucoes = [];
+        const blocoRegex = /\[\[AUTO_EVOLUCAO\]\]([\s\S]*?)\[\[FIM_AUTO\]\]/i;
+        let match = textoProcessado.match(blocoRegex);
+
+        while (match) {
+            const bloco = match[1].trim();
+            const json = tentarConverterJSON(bloco);
+            if (json) {
+                evolucoes.push(json);
+            }
+            textoProcessado = textoProcessado.replace(match[0], '').trim();
+            match = textoProcessado.match(blocoRegex);
+        }
+
+        return { textoSemBlocos: textoProcessado.trim(), evolucoes };
+    }
+
+    function tentarConverterJSON(bloco) {
+        if (!bloco) return null;
+        try {
+            return JSON.parse(bloco);
+        } catch (erro) {
+            console.error('Bloco de auto evolução inválido:', erro, bloco);
+            return null;
+        }
     }
 
     /**
