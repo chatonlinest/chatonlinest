@@ -2990,6 +2990,54 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
   }
   async applyPendingPatchesWithConfirmation(baseCode, originalPrompt, systemPrompt) {
     let code = baseCode;
+    const immutableBaseCode = baseCode; // snapshot imutável para backups não saturados
+
+    const captureAtomicBackup = (searchBlock) => {
+      const exact = PatchApplicator.findExactMatch(immutableBaseCode, searchBlock);
+      if (exact && exact.confidence === 1) {
+        return {
+          snippet: immutableBaseCode.substring(exact.idx, exact.idx + exact.len),
+          confidence: 1.0,
+          source: 'immutable-exact'
+        };
+      }
+
+      const similar = PatchApplicator._findSimilarRegions(immutableBaseCode, searchBlock, {
+        minSimilarity: 0.5,
+        maxCandidates: 1,
+        flexibleLength: true
+      });
+      if (similar.length > 0) {
+        const best = similar[0];
+        return {
+          snippet: immutableBaseCode.substring(best.start, best.end),
+          confidence: best.similarity || 0,
+          source: 'immutable-similar'
+        };
+      }
+
+      const lines = immutableBaseCode.split('\n');
+      const searchLines = searchBlock.split('\n').filter(l => l.trim().length > 2);
+      if (searchLines.length > 0) {
+        const target = searchLines[0].trim();
+        const idx = lines.findIndex(l => l.includes(target));
+        if (idx !== -1) {
+          const start = Math.max(0, idx - 5);
+          const end = Math.min(lines.length, idx + 5);
+          return {
+            snippet: lines.slice(start, end).join('\n'),
+            confidence: 0.35,
+            source: 'immutable-context'
+          };
+        }
+      }
+
+      return {
+        snippet: 'N/A (Não foi possível localizar um trecho similar no snapshot imutável)',
+        confidence: 0,
+        source: 'not-found'
+      };
+    };
     const results = [];
     let applied = 0, failed = 0;
     const MAX_RETRIES = 13;
@@ -3075,32 +3123,9 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
             retryCount++;
             this.setProcessingState(true, `RECUPERANDO MUNDO ${patchIdx + 1} (BACKUP ${retryCount})...`);
             
-            const backupRegions = PatchApplicator._findSimilarRegions(code, patch.search, {
-                minSimilarity: 0.5,
-                maxCandidates: 1,
-                flexibleLength: true
-            });
-
-            let atomicBackup = "N/A (Não foi possível localizar um trecho similar para backup)";
-            let backupConfidence = 0;
-
-            if (backupRegions.length > 0) {
-                const bestRegion = backupRegions[0];
-                atomicBackup = code.substring(bestRegion.start, bestRegion.end);
-                backupConfidence = bestRegion.similarity;
-            } else {
-                const lines = code.split('\n');
-                const searchLines = patch.search.split('\n').filter(l => l.trim().length > 2);
-                if (searchLines.length > 0) {
-                    const searchTarget = searchLines[0].trim();
-                    const matchIdx = lines.findIndex(l => l.includes(searchTarget));
-                    if (matchIdx !== -1) {
-                        const startCtx = Math.max(0, matchIdx - 5);
-                        const endCtx = Math.min(lines.length, matchIdx + 5);
-                        atomicBackup = lines.slice(startCtx, endCtx).join('\n');
-                    }
-                }
-            }
+            const backupData = captureAtomicBackup(patch.search);
+            const atomicBackup = backupData.snippet;
+            const backupConfidence = backupData.confidence;
 
             const refinePrompt = `═══════════════════════════════════════════════════════════════════
 PROTOCOLO DE BACKUP IMEDIATO — CICLO #${retryCount} / ${MAX_RETRIES}
@@ -3112,8 +3137,7 @@ SEARCH REJEITADO (OFF-SYNC):
 ${patch.search}
 \`\`\`
 
-BACKUP ATÔMICO (TRECHO ORIGINAL DO ARQUIVO):
-Este é o conteúdo EXATO do arquivo na região onde o SEARCH deveria se encaixar. Use-o como sua ÚNICA fonte da verdade.
+BACKUP ATÔMICO (SNAPSHOT IMUTÁVEL PRÉ-MODIFICAÇÃO):\nFonte: ${backupData.source} · Confiança: ${(backupConfidence * 100).toFixed(1)}%\nEste trecho vem do código ANTES de qualquer modificação desta execução. Use-o como ÚNICA fonte da verdade (evite código saturado por tentativas anteriores).
 \`\`\`
 ${atomicBackup}
 \`\`\`
