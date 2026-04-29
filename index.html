@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>STIA Craft</title>
+<title>STIA Craft • Codex Web Ultimate</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
@@ -161,6 +161,32 @@ body {
   transition: none;
 }
 .btn-settings:hover { color: #FFFF55; box-shadow: var(--mc-btn-hover-shadow); }
+
+.codex-hero {
+  display: grid;
+  grid-template-columns: 1.2fr auto;
+  gap: 12px;
+  align-items: center;
+  background: linear-gradient(90deg, #101820 0%, #1f2d3a 45%, #3b1f52 100%);
+  border-bottom: 4px solid #000;
+  box-shadow: inset 4px 4px 0 rgba(255,255,255,0.15), inset -4px -4px 0 rgba(0,0,0,0.35);
+  padding: 14px 22px;
+}
+.codex-hero-title { font-size: 1.45rem; color: #55ffff; letter-spacing: 1px; }
+.codex-hero-sub { font-size: 1.05rem; color: #ffffff; opacity: 0.9; }
+.codex-hero-badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.codex-chip {
+  background: #000;
+  border: 2px solid #55ffff;
+  color: #55ffff;
+  padding: 4px 8px;
+  font-size: 1rem;
+  text-shadow: none;
+}
+@media (max-width: 900px) {
+  .codex-hero { grid-template-columns: 1fr; }
+  .codex-hero-badges { justify-content: flex-start; }
+}
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1420,14 +1446,25 @@ body {
 <header class="header">
   <div class="header-title" translate="no">
     <img src="https://dl.dropboxusercontent.com/scl/fi/5v2e2x5w24rnicx4kd9sv/STIACraft.png?rlkey=je1h7ssz5a84ca1wf0s4ovo4n&st=1cgnfjoo&dl=0" alt="STIA Logo" class="header-logo">
-    <h1>STIA Craft</h1>
+    <h1>STIA Craft Codex</h1>
     <span class="version-badge">v12.0</span>
-    <span class="mode-badge" id="modeBadge">7 Estratégias ∞ + Backup</span>
+    <span class="mode-badge" id="modeBadge">Codex Engine ∞ + Guard Rails</span>
   </div>
   <div class="header-controls">
     <button class="btn-settings" id="openSettings" title="Configurações de API"><i class="fi fi-rr-settings"></i></button>
   </div>
 </header>
+<section class="codex-hero" aria-label="Modo Codex Web Supremo">
+  <div>
+    <div class="codex-hero-title">⚡ CODEx WEB SUPREMO ATIVADO</div>
+    <div class="codex-hero-sub">Arquitetura de patch cirúrgico + modo completo + diff inteligente para criar interfaces absurdamente evoluídas.</div>
+  </div>
+  <div class="codex-hero-badges">
+    <span class="codex-chip">Neural Prompt Stack</span>
+    <span class="codex-chip">Live Diff Engine</span>
+    <span class="codex-chip">Hyper UI Forge</span>
+  </div>
+</section>
 <div class="main-container">
   <div class="editor-section">
     <div class="editor-panel">
@@ -1487,7 +1524,7 @@ body {
           </div>
         </div>
         <div class="prompt-container">
-          <textarea id="promptInput" class="prompt-input" placeholder="Descreva as alterações... Ex: Adicione botão animado, mude cor de fundo..."></textarea>
+          <textarea id="promptInput" class="prompt-input" placeholder="Descreva a transformação definitiva... Ex: Crie landing premium com animações, glassmorphism e narrativa de produto."></textarea>
           <div class="prompt-toolbar">
             <button class="btn-secondary" id="addImageBtn" style="padding: 4px 12px; font-size: 1rem;"><i class="fi fi-rr-picture"></i> Imagem</button>
             <div id="imagePreviewBox" class="image-preview-box">
