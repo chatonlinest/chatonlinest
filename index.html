@@ -691,14 +691,17 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 30px;
+  justify-content: center;
+  gap: 10px;
+  padding: 15px;
   background: rgba(5, 7, 9, 0.8);
   border: 1px solid var(--accent-info);
   position: relative;
   box-shadow: 0 0 30px rgba(57, 197, 207, 0.1), inset 0 0 15px rgba(57, 197, 207, 0.05);
   clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
   width: 90%;
+  height: 120px;
+  overflow: hidden;
 }
 .overlay-ai-status::before {
   content: "";
@@ -714,7 +717,7 @@ body {
   100% { background-position: -200% 0; }
 }
 .overlay-ai-status i {
-  font-size: 2.8rem;
+  font-size: 2.2rem;
   color: var(--accent-info);
   text-shadow: 0 0 15px var(--accent-info);
   animation: cyberPulse 2s infinite ease-in-out;
@@ -739,7 +742,7 @@ body {
   to { background-position: 200% center; }
 }
 .overlay-ai-status .loading-dots {
-    margin-top: 10px;
+    margin-top: 5px;
 }
 .cyber-decor {
   position: absolute;
@@ -1378,6 +1381,24 @@ body {
   0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
   100% { transform: translate(var(--mx), -300px) rotate(360deg); opacity: 0; }
 }
+.pixel-dirt {
+  width: 48px;
+  height: 48px;
+  background: #795548;
+  border: 4px solid #000;
+  position: relative;
+  image-rendering: pixelated;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  animation: cyberPulse 2s infinite ease-in-out;
+}
+.pixel-dirt::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 16px;
+  background: #4caf50;
+  box-shadow: inset 4px 4px 0 #81c784, 0 4px 0 #388e3c, 0 8px 0 #2e7d32;
+}
 </style>
 </head>
 <body>
@@ -1913,7 +1934,7 @@ class PatchApplicator {
         idx: actualStartIdx, 
         len: actualLen, 
         confidence: 1.0, 
-        strategy: 'fuzzy-atomic-exact-refinement', 
+        strategy: 'adaptive-atomic', 
         diagnostic: `Fuzzy encontrado, refinado para correspondência exata atômica.` 
       };
     }
@@ -1932,7 +1953,7 @@ class PatchApplicator {
         idx: actualStartIdx, 
         len: actualLen, 
         confidence: finalConfidence, 
-        strategy: 'fuzzy-atomic-contextual-refinement', 
+        strategy: 'adaptive-atomic', 
         diagnostic: `Fuzzy encontrado, refinado para alinhamento contextual atômico.` 
       };
     }
@@ -1942,7 +1963,7 @@ class PatchApplicator {
         idx: bestCandidate.start, 
         len: bestCandidate.end - bestCandidate.start, 
         confidence: bestCandidate.similarity * 0.95,
-        strategy: 'fuzzy-atomic-high-sim-fallback', 
+        strategy: 'adaptive-atomic', 
         diagnostic: `Fuzzy encontrado, mas sem refinamento atômico; alta similaridade.` 
       };
     }
@@ -1952,7 +1973,7 @@ class PatchApplicator {
 
   static findExactMatch(code, search) {
     const idx = code.indexOf(search);
-    if (idx !== -1) return { idx, len: search.length, confidence: 1, strategy: 'exact-atômico' };
+    if (idx !== -1) return { idx, len: search.length, confidence: 1, strategy: 'exact' };
     
     const cleanCode = code.replace(/\r\n/g, '\n');
     const cleanSearch = search.replace(/\r\n/g, '\n');
@@ -1967,7 +1988,7 @@ class PatchApplicator {
       for (let i = 0; i < cleanSearch.length; i++) {
         realLen += (code[realIdx + realLen] === '\r' && code[realIdx + realLen + 1] === '\n') ? 2 : 1;
       }
-      return { idx: realIdx, len: realLen, confidence: 1, strategy: 'exact-atomic-sync' };
+      return { idx: realIdx, len: realLen, confidence: 1, strategy: 'exact' };
     }
 
     const t = search.trim().replace(/\r\n/g, '\n');
@@ -1979,7 +2000,7 @@ class PatchApplicator {
         while (tI < i) { rI += (code[rI] === '\r' && code[rI + 1] === '\n') ? 2 : 1; tI++; }
         let rL = 0, tL = 0;
         while (tL < t.length) { rL += (code[rI + rL] === '\r' && code[rI + rL + 1] === '\n') ? 2 : 1; tL++; }
-        return { idx: rI, len: rL, confidence: 1.0, strategy: 'exact-trimmed-atomic' };
+        return { idx: rI, len: rL, confidence: 1.0, strategy: 'exact' };
       }
     }
     return null;
@@ -2018,7 +2039,7 @@ class PatchApplicator {
         if (confidence >= minConfidence && (!bestMatch || confidence > bestMatch.confidence)) {
           const startIdx = codeLines.slice(0, i).join(codeNewlineStyle).length + (i > 0 ? codeNewlineStyle.length : 0);
           const matchedBlock = codeBlock.join(codeNewlineStyle);
-          bestMatch = { idx: startIdx, len: matchedBlock.length, confidence, strategy: 'atomic-context', matchedLines: validMatches };
+          bestMatch = { idx: startIdx, len: matchedBlock.length, confidence, strategy: 'context-anchor', matchedLines: validMatches };
         }
       }
     }
@@ -2038,12 +2059,12 @@ class PatchApplicator {
                 const exactMatch = PatchApplicator.findExactMatch(block, synchronizedSearch);
                 if (exactMatch && exactMatch.confidence >= 1.0) {
                     currentConfidence = 1.0;
-                    currentStrategy = 'context-anchor-atomic-exact';
+                    currentStrategy = 'context-anchor';
                 } else {
                     const sim = this.lineSimilarity(synchronizedSearch, block, { useStructural: true, useTokens: true, useSignature: true, weightToken: 0.4, weightStruct: 0.3, weightText: 0.2, weightSig: 0.1 });
                     if (sim >= Math.max(0.99, minConfidence)) {
                         currentConfidence = sim;
-                        currentStrategy = 'context-anchor-atomic-high-sim';
+                        currentStrategy = 'context-anchor';
                     } else {
                         continue;
                     }
@@ -2130,7 +2151,7 @@ class PatchApplicator {
       const before = code.substring(0, exactMatch.idx);
       const after  = code.substring(exactMatch.idx + exactMatch.len);
       const synchronizedReplace = replace.split(/\r?\n/).join(codeNewlineStyle);
-      return { success: true, code: before + synchronizedReplace + after, confidence: 1.0, strategy: 'adaptive-atomic-exact', diagnostic: 'Aplicação direta por correspondência atômica exata.' };
+      return { success: true, code: before + synchronizedReplace + after, confidence: 1.0, strategy: 'adaptive-atomic', diagnostic: 'Aplicação direta por correspondência atômica exata.' };
     }
 
     const candidates = this._findSimilarRegions(
@@ -2147,9 +2168,9 @@ class PatchApplicator {
     if (candidates.length === 0) {
       if (allowAppend) {
         const synchronizedReplace = replace.split(/\r?\n/).join(codeNewlineStyle);
-        return { success: true, code: code + (code.endsWith(codeNewlineStyle) ? '' : codeNewlineStyle) + synchronizedReplace, confidence: 0.45, strategy: 'forced-append-atomic-fallback', diagnostic: 'Nenhum match atômico ou similar encontrado; anexado ao final (permitido pelo parâmetro).' };
+        return { success: true, code: code + (code.endsWith(codeNewlineStyle) ? '' : codeNewlineStyle) + synchronizedReplace, confidence: 0.45, strategy: 'adaptive-atomic', diagnostic: 'Nenhum match atômico ou similar encontrado; anexado ao final (permitido pelo parâmetro).' };
       }
-      return { success: false, code, confidence: 0, strategy: 'failed-atomic-search', diagnostic: 'Nenhum match suficientemente similar encontrado para aplicação atômica.' };
+      return { success: false, code, confidence: 0, strategy: 'adaptive-atomic', diagnostic: 'Nenhum match suficientemente similar encontrado para aplicação atômica.' };
     }
 
     const merged = this._mergeOverlappingPatches(candidates);
@@ -2185,14 +2206,14 @@ class PatchApplicator {
       const finalCode = beforeContext + newInnerBlock + afterContext;
       const finalConfidence = Math.min(1, bestCandidate.similarity * 0.7 + contextAlign.confidence * 0.3);
 
-      return { success: true, code: finalCode, confidence: finalConfidence, strategy: 'adaptive-atomic-contextual-align', diagnostic: `Aplicação por alinhamento contextual atômico de ALTA PRECISÃO (${(finalConfidence*100).toFixed(1)}%).` };
+      return { success: true, code: finalCode, confidence: finalConfidence, strategy: 'adaptive-atomic', diagnostic: `Aplicação por alinhamento contextual atômico de ALTA PRECISÃO (${(finalConfidence*100).toFixed(1)}%).` };
 
     } else {
       if (bestCandidate.similarity >= 0.95) {
         const before = code.substring(0, bestCandidate.start);
         const after = code.substring(bestCandidate.end);
         const finalReplace = replace.split(/\r?\n/).join(codeNewlineStyle);
-        return { success: true, code: before + finalReplace + after, confidence: bestCandidate.similarity, strategy: 'adaptive-block-near-perfect-sim', diagnostic: `Substituição completa do bloco por similaridade geral QUASE PERFEITA (${(bestCandidate.similarity*100).toFixed(1)}%).` };
+        return { success: true, code: before + finalReplace + after, confidence: bestCandidate.similarity, strategy: 'adaptive-atomic', diagnostic: `Substituição completa do bloco por similaridade geral QUASE PERFEITA (${(bestCandidate.similarity*100).toFixed(1)}%).` };
       }
     }
     
@@ -2204,12 +2225,12 @@ class PatchApplicator {
         success: true, 
         code: code + atomicInclusion, 
         confidence: 0.6, 
-        strategy: 'forced-append-atomic-adaptive', 
+        strategy: 'adaptive-atomic', 
         diagnostic: 'SINCRONIA ATÔMICA: Falha no mapeamento de blocos; Injeção forçada realizada no final do segmento com higienização de quebra de linha.' 
       };
     }
     
-    return { success: false, code, confidence: 0, strategy: 'failed-atomic-adaptive', diagnostic: `Nenhuma estratégia adaptativa atômica atingiu a confiança mínima (${(minConfidence*100).toFixed(1)}%).` };
+    return { success: false, code, confidence: 0, strategy: 'adaptive-atomic', diagnostic: `Nenhuma estratégia adaptativa atômica atingiu a confiança mínima (${(minConfidence*100).toFixed(1)}%).` };
   }
 
   static _applyDiffToTarget(targetLines, ops, sourceLines = []) {
@@ -2254,7 +2275,8 @@ class PatchApplicator {
       useContext = true,
       useSignature = true,
       minConfidence = 0.90,
-      maxAttempts = 15
+      maxAttempts = 15,
+      allowCreate = true
     } = params;
 
     const applyMatch = (match, outerStrategyName, attemptNum, maxAttempts) => {
@@ -2280,53 +2302,18 @@ class PatchApplicator {
 
     const buildStrategies = (syncCode, cur, curConf) => [
 
-      { name: 'exact-atomic', fn: () => {
+      { name: 'exact', fn: () => {
           return this.findExactMatch(syncCode, cur);
       }},
 
-      { name: 'exact-trimmed-atomic', fn: () => {
-          return this.findExactMatch(syncCode, cur.trim());
-      }},
-
-      { name: 'atomic-context', fn: () => useContext
+      { name: 'context-anchor', fn: () => useContext
           ? this.findByContext(syncCode, cur, { minConfidence: Math.max(0.95, curConf), useStructural: true, codeNewlineStyle })
-          : null },
-
-      { name: 'context-anchor-atomic', fn: () => useContext
-          ? this.findByContext(syncCode, cur, { minConfidence: Math.max(0.98, curConf + 0.01), useStructural: true, strictAnchorMatch: true, codeNewlineStyle })
           : null },
 
       { name: 'adaptive-atomic', fn: () => {
           const r = this.adaptivePatch(syncCode, cur, syncReplace,
             { minConfidence: Math.max(0.90, curConf), allowAppend: false, preferStructural: true });
           return r.success ? { _direct: r } : null;
-      }},
-
-      { name: 'fuzzy-atomic', fn: () => useFuzzy
-          ? this.fuzzy(syncCode, cur, { minSimilarity: Math.max(0.90, curConf), codeNewlineStyle })
-          : null },
-
-      { name: 'localAlign-atomic', fn: () => {
-          const searchLines = cur.split(codeNewlineStyle);
-          const codeLines   = syncCode.split(codeNewlineStyle);
-          if (searchLines.length < 1 || codeLines.length < 1) return null;
-          const align = this.localAlign(searchLines, codeLines, {
-              useTokenMatch: true,
-              gapPenalty: -3,
-              matchBonus: 5,
-              mismatchPenalty: -2
-          });
-          const idealMaxScore = searchLines.length * 5;
-          const minScoreThreshold = idealMaxScore * 0.95;
-          if (align.score < minScoreThreshold) return null;
-          const startIdx = codeLines.slice(0, align.start).join(codeNewlineStyle).length + (align.start > 0 ? codeNewlineStyle.length : 0);
-          const endIdx   = codeLines.slice(0, align.end).join(codeNewlineStyle).length   + (align.end   > 0 ? codeNewlineStyle.length : 0);
-          if (endIdx <= startIdx) return null;
-          const confidence = Math.min(1.0, align.score / idealMaxScore);
-          if (confidence >= Math.max(0.95, curConf)) {
-              return { idx: startIdx, len: endIdx - startIdx, confidence, strategy: 'localAlign-atomic' };
-          }
-          return null;
       }},
     ];
 
@@ -2382,21 +2369,25 @@ class PatchApplicator {
       }
     }
 
-    if (params.allowAppend !== false) {
-      const needsNewline = !syncCode.endsWith(codeNewlineStyle);
-      const atomicAppend = (needsNewline ? codeNewlineStyle : '') + syncReplace + codeNewlineStyle;
+    const canCreateFromScratch = allowCreate && (params.allowAppend !== false || !syncSearch.trim());
+    if (canCreateFromScratch) {
+      const hasSearchHint = syncSearch.trim().length > 0;
+      const needsNewline = syncCode.length > 0 && !syncCode.endsWith(codeNewlineStyle);
+      const insertion = (needsNewline ? codeNewlineStyle : '') + syncReplace + codeNewlineStyle;
       return {
         success: true,
-        code: syncCode + atomicAppend,
-        confidence: 0.55,
-        strategy: 'forced-append-atomic-fallback',
-        diagnostic: `[SINCRONIZAÇÃO ATÔMICA] ${maxAttempts} estratégias e ${maxAttempts} tentativas esgotadas. Bloco injetado via Append Atômico no final do buffer para preservação de integridade.`
+        code: syncCode + insertion,
+        confidence: hasSearchHint ? 0.55 : 0.70,
+        strategy: 'adaptive-atomic',
+        diagnostic: hasSearchHint
+          ? `[SMART SEARCH REPLACE] Não houve match confiável após ${maxAttempts} tentativas. Modificação criada do zero com inserção controlada no final.`
+          : `[SMART SEARCH REPLACE] Busca vazia/aberta detectada. Conteúdo criado do zero com inserção controlada.`
       };
     }
 
     return {
-      success: false, code, confidence: 0, strategy: 'failed-atomic',
-      diagnostic: `Patch falhou após ${maxAttempts} tentativas com todas as 7 estratégias em nível atômico.`
+      success: false, code, confidence: 0, strategy: 'adaptive-atomic',
+      diagnostic: `SmartSearchReplace falhou: não encontrou match e criação do zero está desativada.`
     };
   }
 
@@ -2412,9 +2403,9 @@ class PatchApplicator {
         const after = baseCode.substring(exact.idx + exact.len);
         return { success: true, code: before + synchronizedReplace + after, confidence: 1.0, strategy: 'exact', diagnostic: 'Sincronização Atômica' };
       }
-      return { success: false, code: baseCode, confidence: exact ? exact.confidence : 0, strategy: 'failed', diagnostic: 'Falha na Precisão Atômica' };
+      return { success: false, code: baseCode, confidence: exact ? exact.confidence : 0, strategy: 'applyPatch', diagnostic: 'Falha na Precisão Atômica' };
     }
-    return this.smartSearchReplace(baseCode, synchronizedSearch, synchronizedReplace, { ...params, useFuzzy: true, useContext: true, useSignature: true });
+    return this.smartSearchReplace(baseCode, synchronizedSearch, synchronizedReplace, { ...params, useFuzzy: true, useContext: true, useSignature: true, allowCreate: params.allowCreate !== false });
   }
 }
 
@@ -2688,9 +2679,9 @@ class STIACoder {
             <i class="fi fi-rr-hammer" style="color: #FFFF55"></i>
             <span style="text-shadow: 1px 1px 0 #000; letter-spacing: 1px;">GERANDO MUNDO</span>
           </div>
-          <div class="overlay-ai-status" style="background: #4c4c4c; border: 4px solid #000; box-shadow: inset 4px 4px 0 #8b8b8b, 8px 8px 0 rgba(0,0,0,0.5); clip-path: none; animation: none;">
-            <i class="fi fi-rr-box-open" style="color: var(--accent-secondary); text-shadow: 1px 1px 0 #000; font-size: 3rem;"></i>
-            <span class="message-text" style="background: none; -webkit-text-fill-color: var(--accent-primary); text-shadow: 1px 1px 0 #000; animation: none; font-size: 1.5rem;">${message}</span>
+          <div class="overlay-ai-status" style="background: #4c4c4c; border: 4px solid #000; box-shadow: inset 4px 4px 0 #8b8b8b, 8px 8px 0 rgba(0,0,0,0.5); clip-path: none; animation: none; height: 120px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; gap: 10px;">
+            <div class="pixel-dirt"></div>
+            <span class="message-text" style="background: none; -webkit-text-fill-color: var(--accent-primary); text-shadow: 1px 1px 0 #000; animation: none; font-size: 1.3rem;">${message}</span>
             <div style="font-size: 12px; color: #AAAAAA; margin-top: 12px; font-family: var(--font-mono); text-shadow: 1px 1px 0 #000; text-transform: uppercase;">
               LENDO LIVROS DE ENCANTOS...
             </div>
@@ -3020,6 +3011,54 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
   }
   async applyPendingPatchesWithConfirmation(baseCode, originalPrompt, systemPrompt) {
     let code = baseCode;
+    const immutableBaseCode = baseCode; // snapshot imutável para backups não saturados
+
+    const captureAtomicBackup = (searchBlock) => {
+      const exact = PatchApplicator.findExactMatch(immutableBaseCode, searchBlock);
+      if (exact && exact.confidence === 1) {
+        return {
+          snippet: immutableBaseCode.substring(exact.idx, exact.idx + exact.len),
+          confidence: 1.0,
+          source: 'immutable-exact'
+        };
+      }
+
+      const similar = PatchApplicator._findSimilarRegions(immutableBaseCode, searchBlock, {
+        minSimilarity: 0.5,
+        maxCandidates: 1,
+        flexibleLength: true
+      });
+      if (similar.length > 0) {
+        const best = similar[0];
+        return {
+          snippet: immutableBaseCode.substring(best.start, best.end),
+          confidence: best.similarity || 0,
+          source: 'immutable-similar'
+        };
+      }
+
+      const lines = immutableBaseCode.split('\n');
+      const searchLines = searchBlock.split('\n').filter(l => l.trim().length > 2);
+      if (searchLines.length > 0) {
+        const target = searchLines[0].trim();
+        const idx = lines.findIndex(l => l.includes(target));
+        if (idx !== -1) {
+          const start = Math.max(0, idx - 5);
+          const end = Math.min(lines.length, idx + 5);
+          return {
+            snippet: lines.slice(start, end).join('\n'),
+            confidence: 0.35,
+            source: 'immutable-context'
+          };
+        }
+      }
+
+      return {
+        snippet: 'N/A (Não foi possível localizar um trecho similar no snapshot imutável)',
+        confidence: 0,
+        source: 'not-found'
+      };
+    };
     const results = [];
     let applied = 0, failed = 0;
     const MAX_RETRIES = 13;
@@ -3085,7 +3124,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
                 status: 'applied', 
                 confidence: 1.0, 
                 chars: { del: originalPatch.search.length, add: originalPatch.replace.length },
-                strategy: `fallback-adaptive > ${adaptiveResult.strategy}`,
+                strategy: `adaptive-atomic > ${adaptiveResult.strategy}`,
                 diagnostic: `ADAPTAÇÃO ATÔMICA BEM-SUCEDIDA (100% Confiança): ${adaptiveResult.diagnostic}` 
               });
               appliedSuccessfully = true;
@@ -3096,7 +3135,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
                 status: 'failed', 
                 confidence: adaptiveResult.confidence, 
                 chars: { del: originalPatch.search.length, add: originalPatch.replace.length },
-                strategy: `critical-failure > ${adaptiveResult.strategy}`, 
+                strategy: `applyPatch > ${adaptiveResult.strategy}`, 
                 diagnostic: `DESALINHAMENTO ATÔMICO IRRECUPERÁVEL (Confiança Final: ${(adaptiveResult.confidence * 100).toFixed(1)}%)` 
               });
               patchFailed = true;
@@ -3105,32 +3144,9 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
             retryCount++;
             this.setProcessingState(true, `RECUPERANDO MUNDO ${patchIdx + 1} (BACKUP ${retryCount})...`);
             
-            const backupRegions = PatchApplicator._findSimilarRegions(code, patch.search, {
-                minSimilarity: 0.5,
-                maxCandidates: 1,
-                flexibleLength: true
-            });
-
-            let atomicBackup = "N/A (Não foi possível localizar um trecho similar para backup)";
-            let backupConfidence = 0;
-
-            if (backupRegions.length > 0) {
-                const bestRegion = backupRegions[0];
-                atomicBackup = code.substring(bestRegion.start, bestRegion.end);
-                backupConfidence = bestRegion.similarity;
-            } else {
-                const lines = code.split('\n');
-                const searchLines = patch.search.split('\n').filter(l => l.trim().length > 2);
-                if (searchLines.length > 0) {
-                    const searchTarget = searchLines[0].trim();
-                    const matchIdx = lines.findIndex(l => l.includes(searchTarget));
-                    if (matchIdx !== -1) {
-                        const startCtx = Math.max(0, matchIdx - 5);
-                        const endCtx = Math.min(lines.length, matchIdx + 5);
-                        atomicBackup = lines.slice(startCtx, endCtx).join('\n');
-                    }
-                }
-            }
+            const backupData = captureAtomicBackup(patch.search);
+            const atomicBackup = backupData.snippet;
+            const backupConfidence = backupData.confidence;
 
             const refinePrompt = `═══════════════════════════════════════════════════════════════════
 PROTOCOLO DE BACKUP IMEDIATO — CICLO #${retryCount} / ${MAX_RETRIES}
@@ -3142,8 +3158,7 @@ SEARCH REJEITADO (OFF-SYNC):
 ${patch.search}
 \`\`\`
 
-BACKUP ATÔMICO (TRECHO ORIGINAL DO ARQUIVO):
-Este é o conteúdo EXATO do arquivo na região onde o SEARCH deveria se encaixar. Use-o como sua ÚNICA fonte da verdade.
+BACKUP ATÔMICO (SNAPSHOT IMUTÁVEL PRÉ-MODIFICAÇÃO):\nFonte: ${backupData.source} · Confiança: ${(backupConfidence * 100).toFixed(1)}%\nEste trecho vem do código ANTES de qualquer modificação desta execução. Use-o como ÚNICA fonte da verdade (evite código saturado por tentativas anteriores).
 \`\`\`
 ${atomicBackup}
 \`\`\`
@@ -3178,7 +3193,7 @@ RETORNE APENAS O BLOCO SEARCH/REPLACE REPARADO, baseado no BACKUP ATÔMICO.`;
                 status: 'failed', 
                 confidence: 0, 
                 chars: { del: originalPatch.search.length, add: originalPatch.replace.length },
-                strategy: 'backup-exhausted', 
+                strategy: 'applyPatch', 
                 diagnostic: `Protocolo de backup esgotado após ${retryCount} ciclos sem conseguir gerar patch refinado.` 
               });
             }
