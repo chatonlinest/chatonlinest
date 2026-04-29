@@ -1717,6 +1717,24 @@ class DiffEngine {
 }
 
 class PatchApplicator {
+  static strategyProfile(name, curConf = 0.90) {
+    const high = Math.min(0.995, curConf + 0.04);
+    const veryHigh = Math.min(0.999, curConf + 0.06);
+    const profiles = {
+      exact: { min: 1.0, confidence: 1.0 },
+      'exact-atomic': { min: 1.0, confidence: 1.0 },
+      'exact-atomic-sync': { min: 1.0, confidence: 1.0 },
+      'exact-trimmed-atomic': { min: veryHigh, confidence: veryHigh },
+      'atomic-context': { min: high, confidence: high },
+      'context-anchor': { min: veryHigh, confidence: veryHigh },
+      'context-anchor-atomic': { min: veryHigh, confidence: veryHigh },
+      'adaptive-atomic': { min: Math.max(0.90, curConf), confidence: Math.max(0.90, curConf) },
+      'fuzzy-atomic': { min: Math.max(0.89, curConf - 0.01), confidence: Math.max(0.89, curConf - 0.01) },
+      'localAlign-atomic': { min: high, confidence: high }
+    };
+    return profiles[name] || { min: Math.max(0.90, curConf), confidence: Math.max(0.90, curConf) };
+  }
+
   static normalizeWhitespace(str, options = { collapseSpaces: true, trimLines: true, ignoreIndent: false }) {
     if (!str) return '';
     let result = str;
@@ -2253,8 +2271,8 @@ class PatchApplicator {
       useFuzzy = true,
       useContext = true,
       useSignature = true,
-      minConfidence = 0.90,
-      maxAttempts = 15
+      minConfidence = 0.92,
+      maxAttempts = 24
     } = params;
 
     const applyMatch = (match, outerStrategyName, attemptNum, maxAttempts) => {
@@ -2284,16 +2302,28 @@ class PatchApplicator {
           return this.findExactMatch(syncCode, cur);
       }},
 
+      { name: 'exact', fn: () => {
+          return this.findExactMatch(syncCode, cur);
+      }},
+
       { name: 'exact-trimmed-atomic', fn: () => {
           return this.findExactMatch(syncCode, cur.trim());
       }},
 
+      { name: 'exact-atomic-sync', fn: () => {
+          return this.findExactMatch(syncCode, cur.replace(/\s+$/gm, ''));
+      }},
+
       { name: 'atomic-context', fn: () => useContext
-          ? this.findByContext(syncCode, cur, { minConfidence: Math.max(0.95, curConf), useStructural: true, codeNewlineStyle })
+          ? this.findByContext(syncCode, cur, { minConfidence: this.strategyProfile('atomic-context', curConf).min, useStructural: true, codeNewlineStyle })
+          : null },
+
+      { name: 'context-anchor', fn: () => useContext
+          ? this.findByContext(syncCode, cur, { minConfidence: this.strategyProfile('context-anchor', curConf).min, useStructural: true, strictAnchorMatch: true, codeNewlineStyle })
           : null },
 
       { name: 'context-anchor-atomic', fn: () => useContext
-          ? this.findByContext(syncCode, cur, { minConfidence: Math.max(0.98, curConf + 0.01), useStructural: true, strictAnchorMatch: true, codeNewlineStyle })
+          ? this.findByContext(syncCode, cur, { minConfidence: this.strategyProfile('context-anchor-atomic', curConf).min, useStructural: true, strictAnchorMatch: true, codeNewlineStyle })
           : null },
 
       { name: 'adaptive-atomic', fn: () => {
@@ -2303,7 +2333,7 @@ class PatchApplicator {
       }},
 
       { name: 'fuzzy-atomic', fn: () => useFuzzy
-          ? this.fuzzy(syncCode, cur, { minSimilarity: Math.max(0.90, curConf), codeNewlineStyle })
+          ? this.fuzzy(syncCode, cur, { minSimilarity: this.strategyProfile('fuzzy-atomic', curConf).min, codeNewlineStyle })
           : null },
 
       { name: 'localAlign-atomic', fn: () => {
@@ -2373,7 +2403,8 @@ class PatchApplicator {
             }
             continue;
           }
-          if (match.confidence >= Math.max(0.95, curConf - 0.05)) {
+          const requiredConfidence = this.strategyProfile(strat.name, curConf).confidence;
+          if (match.confidence >= Math.max(requiredConfidence, curConf - 0.04)) {
             const result = applyMatch(match, strat.name, attempt, maxAttempts);
             return { ...result,
               diagnostic: `[T${attempt+1}/${maxAttempts}] ${result.diagnostic} (conf=${(match.confidence*100).toFixed(1)}%)` };
