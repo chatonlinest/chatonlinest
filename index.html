@@ -2532,6 +2532,11 @@ class STIACoder {
       lastStrategy: '',
       architectureDigest: ''
     };
+    this.patchModeConfig = {
+      multiPass: 3,
+      minPatchBlocks: 1,
+      strictPatchConfidence: 1
+    };
     this.initElements();
     this.bindEvents();
     this.setupModelSelector();
@@ -2994,6 +2999,8 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
       patches = this.parseSearchReplaceBlocks(this._cleanAIResponse(retryRaw));
     }
     if (!patches.length) throw new Error('Falha crítica: A IA não conseguiu gerar blocos de remendo para esta solicitação.');
+    patches = this.optimizePatchQueue(patches, currentCode);
+    if (patches.length < this.patchModeConfig.minPatchBlocks) throw new Error('Modo patch avançado: nenhum bloco válido após otimização.');
     this.pendingPatches = patches;
     await this.applyPendingPatchesWithConfirmation(currentCode, prompt, systemPrompt);
   }
@@ -3016,6 +3023,30 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
     }
     return patches;
   }
+  optimizePatchQueue(patches, code) {
+    const fingerprint = new Set();
+    const queue = [];
+    patches.forEach((patch, idx) => {
+      const key = `${patch.search}__${patch.replace}`;
+      if (fingerprint.has(key)) return;
+      fingerprint.add(key);
+      const exact = code.indexOf(patch.search);
+      const anchor = exact >= 0 ? exact : Number.MAX_SAFE_INTEGER - idx;
+      const risk = this.estimatePatchRisk(patch);
+      queue.push({ ...patch, _anchor: anchor, _risk: risk });
+    });
+    queue.sort((a, b) => a._anchor - b._anchor || a._risk - b._risk);
+    return queue.map(({ _anchor, _risk, ...patch }) => patch);
+  }
+
+  estimatePatchRisk(patch) {
+    const del = patch.search.split('\n').length;
+    const add = patch.replace.split('\n').length;
+    const delta = Math.abs(add - del);
+    const sizePenalty = Math.min(8, Math.floor((patch.search.length + patch.replace.length) / 600));
+    return delta + sizePenalty;
+  }
+
   async applyPendingPatchesWithConfirmation(baseCode, originalPrompt, systemPrompt) {
     let code = baseCode;
     const immutableBaseCode = baseCode; // snapshot imutável para backups não saturados
@@ -3069,6 +3100,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
     const results = [];
     let applied = 0, failed = 0;
     const MAX_RETRIES = 13;
+    const telemetry = [];
     
     for (let patchIdx = 0; patchIdx < this.pendingPatches.length; patchIdx++) {
       const originalPatch = this.pendingPatches[patchIdx];
@@ -3091,6 +3123,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
           strategy: directCheck.strategy, 
           diagnostic: 'SINCRONIA ATÔMICA OK - 100% Confiança (Match Direto)' 
         });
+        telemetry.push({ patch: patchIdx + 1, retries: 0, mode: 'direct' });
         appliedSuccessfully = true;
         continue;
       }
@@ -3113,6 +3146,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
             strategy: result.strategy, 
             diagnostic: `SINCRONIA ATÔMICA OK - 100% Confiança${retryCount > 0 ? ` (Estabilizado via Refinamento #${retryCount})` : ' (Match Direto)'}` 
           });
+          telemetry.push({ patch: patchIdx + 1, retries: retryCount, mode: 'refined' });
           appliedSuccessfully = true;
         } else {
           // SE A PRIMEIRA TENTATIVA OU QUALQUER REFINAMENTO NÃO FOR 100%, ACIONAR BACKUP IMEDIATAMENTE
@@ -3134,6 +3168,7 @@ Forneça SOMENTE blocos SEARCH/REPLACE. NENHUM outro texto.`;
                 strategy: `adaptive-atomic > ${adaptiveResult.strategy}`,
                 diagnostic: `ADAPTAÇÃO ATÔMICA BEM-SUCEDIDA (100% Confiança): ${adaptiveResult.diagnostic}` 
               });
+              telemetry.push({ patch: patchIdx + 1, retries: retryCount, mode: 'adaptive' });
               appliedSuccessfully = true;
             } else {
               failed++;
@@ -3220,7 +3255,8 @@ RETORNE APENAS O BLOCO SEARCH/REPLACE REPARADO, baseado no BACKUP ATÔMICO.`;
       const match = r.diagnostic?.match(/Refinamento #(\d+)/);
       return sum + (match ? parseInt(match[1]) : 0);
     }, 0);
-    if (failed > 0) { this.showToast(`⚠️ VETOR DE REMENDO: ${applied} OK, ${failed} FALHA CRÍTICA (REFINAMENTOS: ${totalRetries})`, 'warning'); }
+    const retried = telemetry.filter(t => t.retries > 0).length;
+    if (failed > 0) { this.showToast(`⚠️ VETOR DE REMENDO: ${applied} OK, ${failed} FALHA CRÍTICA (REFINAMENTOS: ${totalRetries} | RETRY PATCHES: ${retried})`, 'warning'); }
     else if (totalRetries > 0) { this.showToast(`🧬 SINCRONIZAÇÃO ATÔMICA CONCLUÍDA! (REFINAMENTOS REALIZADOS: ${totalRetries})`, 'success'); }
     else { this.showToast(`💎 PRECISÃO ATÔMICA ABSOLUTA: ${applied}/${applied} PATCHES SINCRONIZADOS 1:1!`, 'success'); }
   }
