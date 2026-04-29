@@ -2254,7 +2254,8 @@ class PatchApplicator {
       useContext = true,
       useSignature = true,
       minConfidence = 0.90,
-      maxAttempts = 15
+      maxAttempts = 15,
+      allowCreate = true
     } = params;
 
     const applyMatch = (match, outerStrategyName, attemptNum, maxAttempts) => {
@@ -2347,21 +2348,25 @@ class PatchApplicator {
       }
     }
 
-    if (params.allowAppend !== false) {
-      const needsNewline = !syncCode.endsWith(codeNewlineStyle);
-      const atomicAppend = (needsNewline ? codeNewlineStyle : '') + syncReplace + codeNewlineStyle;
+    const canCreateFromScratch = allowCreate && (params.allowAppend !== false || !syncSearch.trim());
+    if (canCreateFromScratch) {
+      const hasSearchHint = syncSearch.trim().length > 0;
+      const needsNewline = syncCode.length > 0 && !syncCode.endsWith(codeNewlineStyle);
+      const insertion = (needsNewline ? codeNewlineStyle : '') + syncReplace + codeNewlineStyle;
       return {
         success: true,
-        code: syncCode + atomicAppend,
-        confidence: 0.55,
+        code: syncCode + insertion,
+        confidence: hasSearchHint ? 0.55 : 0.70,
         strategy: 'adaptive-atomic',
-        diagnostic: `[SINCRONIZAÇÃO ATÔMICA] ${maxAttempts} estratégias e ${maxAttempts} tentativas esgotadas. Bloco injetado via Append Atômico no final do buffer para preservação de integridade.`
+        diagnostic: hasSearchHint
+          ? `[SMART SEARCH REPLACE] Não houve match confiável após ${maxAttempts} tentativas. Modificação criada do zero com inserção controlada no final.`
+          : `[SMART SEARCH REPLACE] Busca vazia/aberta detectada. Conteúdo criado do zero com inserção controlada.`
       };
     }
 
     return {
       success: false, code, confidence: 0, strategy: 'adaptive-atomic',
-      diagnostic: `Patch falhou após ${maxAttempts} tentativas com estratégias configuradas.`
+      diagnostic: `SmartSearchReplace falhou: não encontrou match e criação do zero está desativada.`
     };
   }
 
@@ -2379,7 +2384,7 @@ class PatchApplicator {
       }
       return { success: false, code: baseCode, confidence: exact ? exact.confidence : 0, strategy: 'applyPatch', diagnostic: 'Falha na Precisão Atômica' };
     }
-    return this.smartSearchReplace(baseCode, synchronizedSearch, synchronizedReplace, { ...params, useFuzzy: true, useContext: true, useSignature: true });
+    return this.smartSearchReplace(baseCode, synchronizedSearch, synchronizedReplace, { ...params, useFuzzy: true, useContext: true, useSignature: true, allowCreate: params.allowCreate !== false });
   }
 }
 
