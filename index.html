@@ -2526,6 +2526,12 @@ class STIACoder {
     this._handlingMultiFile = false;
     // Flag para debug do pré-scan (true = mostra relatório no console)
     this.debugPreScan = true;
+    this.codexSession = {
+      revision: 0,
+      recentGoals: [],
+      lastStrategy: '',
+      architectureDigest: ''
+    };
     this.initElements();
     this.bindEvents();
     this.setupModelSelector();
@@ -2849,6 +2855,7 @@ class STIACoder {
     if (!this.GEMINI_API_KEY) { this.showToast('Configure sua API Key primeiro!', 'warning'); this.openSettings(); return; }
     const prompt = this.el.prompt.value.trim();
     if (!prompt && !this.selectedImage) { this.showToast('Digite uma instrução ou envie uma imagem!', 'error'); return; }
+    const codexPrompt = this.buildCodexPrompt(prompt, this.el.editor.value);
 
     // Proteção contra duplo clique
     if (this.isProcessing) {
@@ -2863,8 +2870,8 @@ class STIACoder {
 
     try {
       const currentCode = this.el.editor.value;
-      if (this.aiMode === 'patch') await this.processAsPatch(prompt, currentCode);
-      else await this.processAsFull(prompt, currentCode);
+      if (this.aiMode === 'patch') await this.processAsPatch(codexPrompt, currentCode);
+      else await this.processAsFull(codexPrompt, currentCode);
       this.setStatus('success', 'Concluído');
       this.el.prompt.value = '';
       this.clearSelectedImage();
@@ -3253,6 +3260,43 @@ RETORNE APENAS O BLOCO SEARCH/REPLACE REPARADO, baseado no BACKUP ATÔMICO.`;
     this.el.patchCountStat.style.display = '';
     this.el.patchCount.textContent = results.length;
   }
+
+  buildCodexPrompt(userPrompt, codeSnapshot) {
+    this.codexSession.revision += 1;
+    const profile = this.extractProjectProfile(codeSnapshot);
+    this.codexSession.architectureDigest = profile.digest;
+    this.codexSession.recentGoals.unshift(userPrompt);
+    this.codexSession.recentGoals = this.codexSession.recentGoals.slice(0, 6);
+    this.codexSession.lastStrategy = this.aiMode === 'patch' ? 'micro-patches atomicos' : 'reescrita controlada full-file';
+
+    return [
+      'PROTOCOLO CODEX WEB DEFINITIVO v1',
+      `REVISAO: ${this.codexSession.revision}`,
+      `ESTRATEGIA ATIVA: ${this.codexSession.lastStrategy}`,
+      `ASSINATURA ARQUITETURAL: ${this.codexSession.architectureDigest}`,
+      `RESUMO TECNICO: ${profile.summary}`,
+      `MOTOR JS: ${profile.jsHints}`,
+      'REGRA CRITICA: NUNCA altere a interface visual original sem instrucao explicita.',
+      'REGRA CRITICA: Preserve semântica, acessibilidade e eventos existentes.',
+      'OBJETIVOS RECENTES:',
+      ...this.codexSession.recentGoals.map((g, i) => `${i + 1}. ${g}`),
+      'OBJETIVO DESTA EXECUCAO:',
+      userPrompt
+    ].join('\n');
+  }
+
+  extractProjectProfile(code) {
+    const htmlTags = (code.match(/<([a-z0-9-]+)/gi) || []).map(t => t.toLowerCase());
+    const cssVars = (code.match(/--[a-z0-9-]+\s*:/gi) || []).length;
+    const listeners = (code.match(/addEventListener\s*\(/g) || []).length;
+    const classes = (code.match(/class=\"[^\"]+\"/g) || []).length;
+    const hasPatchEngine = /SEARCH\s*\n|REPLACE|PatchApplicator|DiffEngine/.test(code);
+    const digest = `T${htmlTags.length}-V${cssVars}-E${listeners}-C${classes}-${hasPatchEngine ? 'PATCH' : 'BASIC'}`;
+    const summary = `HTML rico com ${htmlTags.length} tags, ${classes} blocos com classes e ${cssVars} variaveis CSS.`;
+    const jsHints = `${listeners} listeners detectados; motor de patch ${hasPatchEngine ? 'presente' : 'ausente'}.`;
+    return { digest, summary, jsHints };
+  }
+
   async processAsFull(prompt, currentCode) {
     this.setStatus('thinking', 'Executando Pré-Análise Estrutural...');
     const analysisReport = await this.preScanCode(currentCode, prompt);
