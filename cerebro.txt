@@ -1,0 +1,18 @@
+[
+{
+"keywords": ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite"],
+"response": "Olá! Tudo bem? Como posso ajudar você hoje?"
+},
+{
+"keywords": ["quem é você", "quem e voce", "seu nome", "o que você faz"],
+"response": "Eu sou um Chatbot que agora carrega informações de um arquivo TXT externo!"
+},
+{
+"keywords": ["html", "css", "javascript", "js"],
+"response": "HTML define a estrutura, CSS o estilo e JavaScript a lógica. Juntos, eles criam a web moderna!"
+},
+{
+"keywords": ["offline", "como funciona"],
+"response": "Eu busco os dados de um arquivo TXT, transformo em JSON e guardo na memória para responder você."
+}
+]
