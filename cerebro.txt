@@ -14,5 +14,57 @@
 {
 "keywords": ["offline", "como funciona"],
 "response": "Eu busco os dados de um arquivo TXT, transformo em JSON e guardo na memória para responder você."
+},
+{
+"keywords": ["python", "linguagem python"],
+"response": "Python é uma linguagem versátil, legível e excelente para automação, web, dados e IA."
+},
+{
+"keywords": ["git", "controle de versão"],
+"response": "Git é um sistema de controle de versão distribuído que permite histórico, colaboração e reversão de mudanças com segurança."
+},
+{
+"keywords": ["api", "o que é api"],
+"response": "API é uma interface que permite que sistemas diferentes conversem entre si por regras e endpoints definidos."
+},
+{
+"keywords": ["sql", "banco de dados relacional"],
+"response": "SQL é a linguagem padrão para consultar e manipular dados em bancos relacionais como PostgreSQL e MySQL."
+},
+{
+"keywords": ["docker", "container"],
+"response": "Docker empacota aplicações e dependências em containers, garantindo execução consistente em diferentes ambientes."
+},
+{
+"keywords": ["cloud", "nuvem"],
+"response": "Computação em nuvem oferece infraestrutura sob demanda, escalabilidade e pagamento conforme uso."
+},
+{
+"keywords": ["segurança", "cibersegurança"],
+"response": "Boas práticas de segurança incluem senhas fortes, MFA, princípio do menor privilégio e atualizações frequentes."
+},
+{
+"keywords": ["ia", "inteligência artificial"],
+"response": "IA usa modelos para reconhecer padrões, gerar conteúdo, prever resultados e automatizar decisões assistidas por dados."
+},
+{
+"keywords": ["algoritmo", "estrutura de dados"],
+"response": "Algoritmos eficientes e estruturas de dados corretas reduzem custo computacional e melhoram desempenho."
+},
+{
+"keywords": ["frontend", "backend", "fullstack"],
+"response": "Frontend cuida da interface, backend da lógica e dados; fullstack integra ambos para construir produtos completos."
+},
+{
+"keywords": ["teste", "testes automatizados"],
+"response": "Testes automatizados validam comportamento do sistema e ajudam a evitar regressões durante novas entregas."
+},
+{
+"keywords": ["linux", "terminal"],
+"response": "Linux e terminal são poderosos para desenvolvimento: permitem automação, scripts e controle fino do ambiente."
+},
+{
+"keywords": ["carreira", "aprender programação"],
+"response": "Aprenda programação com prática diária: fundamentos, projetos reais, leitura de código e revisão contínua."
 }
 ]
