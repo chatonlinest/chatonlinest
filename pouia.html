@@ -234,6 +234,13 @@
       borda: 10,
       brilho: 1
     };
+    let ambienteState = {
+      temaHue: 0,
+      saturacao: 1,
+      brilho: 1,
+      elementosRemovidos: [],
+      elementosAdicionados: []
+    };
     let runtimeAutonomo = {
       versao: 1,
       criadoEm: new Date().toISOString(),
@@ -270,6 +277,7 @@
       await visualRef.set({
         ...visualState,
         itens: itensVisuais,
+        ambienteState,
         atualizadoEm: new Date().toISOString()
       });
     }
@@ -315,9 +323,17 @@
           borda: Number(v.borda || 10),
           brilho: Number(v.brilho || 1)
         };
+        ambienteState = {
+          temaHue: Number(v.ambienteState?.temaHue || 0),
+          saturacao: Number(v.ambienteState?.saturacao || 1),
+          brilho: Number(v.ambienteState?.brilho || 1),
+          elementosRemovidos: Array.isArray(v.ambienteState?.elementosRemovidos) ? v.ambienteState.elementosRemovidos : [],
+          elementosAdicionados: Array.isArray(v.ambienteState?.elementosAdicionados) ? v.ambienteState.elementosAdicionados : []
+        };
         itensVisuais = Array.isArray(v.itens) ? v.itens : [];
         aplicarVisualState();
         renderizarItensVisuais();
+        aplicarEstadoAmbiente();
       }
     }
 
@@ -343,6 +359,54 @@
       });
     }
 
+    function aplicarEstadoAmbiente() {
+      document.body.style.filter = `hue-rotate(${ambienteState.temaHue}deg) saturate(${ambienteState.saturacao}) brightness(${ambienteState.brilho})`;
+
+      ambienteState.elementosRemovidos.forEach((seletor) => {
+        if (seletor === "#aplicacao-pou" || seletor === "body") return;
+        document.querySelectorAll(seletor).forEach((el) => el.remove());
+      });
+
+      const palco = document.getElementById('container-pou');
+      ambienteState.elementosAdicionados.forEach((extra) => {
+        if (!palco || !extra?.id || document.getElementById(extra.id)) return;
+        const el = document.createElement('div');
+        el.id = extra.id;
+        el.className = 'absolute pointer-events-none select-none';
+        el.style.left = `${extra.x}%`;
+        el.style.top = `${extra.y}%`;
+        el.style.fontSize = `${extra.tamanho}px`;
+        el.style.transform = 'translate(-50%, -50%)';
+        el.textContent = extra.emoji || '✨';
+        palco.appendChild(el);
+      });
+    }
+
+    function decidirMutacaoDOM() {
+      const candidatos = [
+        '#bolha-fala',
+        '#form-chat',
+        '#camada-itens',
+        '#boca-pou',
+        '.pou-eye'
+      ];
+      const manter = ['#aplicacao-pou', '#container-pou', '#corpo-pou'];
+      const alvo = candidatos[Math.floor(Math.random() * candidatos.length)];
+      if (!manter.includes(alvo) && Math.random() < 0.18 && !ambienteState.elementosRemovidos.includes(alvo)) {
+        ambienteState.elementosRemovidos.push(alvo);
+      }
+
+      if (ambienteState.elementosAdicionados.length < 10 && Math.random() < 0.55) {
+        ambienteState.elementosAdicionados.push({
+          id: `addon-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+          emoji: ['⚡', '🧬', '🌌', '🌀', '🧠', '☄️'][Math.floor(Math.random() * 6)],
+          x: Math.floor(5 + Math.random() * 90),
+          y: Math.floor(5 + Math.random() * 90),
+          tamanho: Math.floor(14 + Math.random() * 30)
+        });
+      }
+    }
+
     async function evoluirVisual() {
       visualState.hue = (visualState.hue + Math.floor(15 + Math.random() * 35)) % 360;
       visualState.escala = Math.max(0.9, Math.min(1.15, visualState.escala + (Math.random() - 0.5) * 0.06));
@@ -361,10 +425,20 @@
         itensVisuais.splice(Math.floor(Math.random() * itensVisuais.length), 1);
       }
 
+      ambienteState.temaHue = (ambienteState.temaHue + Math.floor(Math.random() * 40)) % 360;
+      ambienteState.saturacao = Math.max(0.7, Math.min(1.8, ambienteState.saturacao + (Math.random() - 0.5) * 0.2));
+      ambienteState.brilho = Math.max(0.75, Math.min(1.35, ambienteState.brilho + (Math.random() - 0.5) * 0.14));
+      decidirMutacaoDOM();
+
       aplicarVisualState();
       renderizarItensVisuais();
+      aplicarEstadoAmbiente();
       await salvarEstadoVisual();
-      await salvarMemoria("evolucao_visual", { visualState, totalItens: itensVisuais.length });
+      await salvarMemoria("evolucao_visual", {
+        visualState,
+        ambienteState,
+        totalItens: itensVisuais.length
+      });
     }
 
     /**
