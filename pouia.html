@@ -152,6 +152,8 @@
         border-4 border-red-900 rounded-t-full w-24 h-12 sm:w-28 sm:h-14">
       </div>
       <div id="camada-itens" class="absolute inset-0 pointer-events-none"></div>
+      <div id="camada-anatomia" class="absolute inset-0 pointer-events-none"></div>
+      <div id="camada-ambiente" class="absolute -inset-10 pointer-events-none"></div>
 
     </div>
 
@@ -249,6 +251,14 @@
       },
       historicoScores: []
     };
+    let anatomiaState = {
+      chifres: 1,
+      tentaculos: 2,
+      orbitas: 1,
+      dentes: 4,
+      espinhos: 3,
+      asas: 0
+    };
     let runtimeAutonomo = {
       versao: 1,
       criadoEm: new Date().toISOString(),
@@ -287,6 +297,7 @@
         itens: itensVisuais,
         ambienteState,
         autonomiaCore,
+        anatomiaState,
         atualizadoEm: new Date().toISOString()
       });
     }
@@ -347,9 +358,18 @@
           },
           historicoScores: Array.isArray(v.autonomiaCore?.historicoScores) ? v.autonomiaCore.historicoScores.slice(-50) : []
         };
+        anatomiaState = {
+          chifres: Number(v.anatomiaState?.chifres || 1),
+          tentaculos: Number(v.anatomiaState?.tentaculos || 2),
+          orbitas: Number(v.anatomiaState?.orbitas || 1),
+          dentes: Number(v.anatomiaState?.dentes || 4),
+          espinhos: Number(v.anatomiaState?.espinhos || 3),
+          asas: Number(v.anatomiaState?.asas || 0)
+        };
         itensVisuais = Array.isArray(v.itens) ? v.itens : [];
         aplicarVisualState();
         renderizarItensVisuais();
+        renderizarAnatomia();
         aplicarEstadoAmbiente();
       }
     }
@@ -385,6 +405,19 @@
       });
 
       const palco = document.getElementById('container-pou');
+      const camadaAmbiente = document.getElementById('camada-ambiente');
+      camadaAmbiente.innerHTML = '';
+      for (let i = 0; i < Math.min(12, ambienteState.elementosAdicionados.length); i++) {
+        const aura = document.createElement('div');
+        aura.className = 'absolute rounded-full';
+        aura.style.left = `${Math.floor(Math.random() * 100)}%`;
+        aura.style.top = `${Math.floor(Math.random() * 100)}%`;
+        aura.style.width = `${20 + Math.floor(Math.random() * 80)}px`;
+        aura.style.height = aura.style.width;
+        aura.style.opacity = `${0.08 + Math.random() * 0.2}`;
+        aura.style.background = 'radial-gradient(circle, rgba(253,224,71,0.5), transparent 70%)';
+        camadaAmbiente.appendChild(aura);
+      }
       ambienteState.elementosAdicionados.forEach((extra) => {
         if (!palco || !extra?.id || document.getElementById(extra.id)) return;
         const el = document.createElement('div');
@@ -397,6 +430,67 @@
         el.textContent = extra.emoji || '✨';
         palco.appendChild(el);
       });
+    }
+
+    function renderizarAnatomia() {
+      const camada = document.getElementById('camada-anatomia');
+      camada.innerHTML = '';
+
+      for (let i = 0; i < anatomiaState.chifres; i++) {
+        const chifre = document.createElement('div');
+        chifre.className = 'absolute';
+        chifre.style.width = '0';
+        chifre.style.height = '0';
+        chifre.style.borderLeft = '10px solid transparent';
+        chifre.style.borderRight = '10px solid transparent';
+        chifre.style.borderBottom = `${24 + i * 2}px solid rgba(120,53,15,0.9)`;
+        chifre.style.left = `${35 + i * 18}%`;
+        chifre.style.top = `${3 + (i % 2) * 2}%`;
+        camada.appendChild(chifre);
+      }
+
+      for (let i = 0; i < anatomiaState.tentaculos; i++) {
+        const t = document.createElement('div');
+        t.className = 'absolute rounded-full';
+        t.style.width = '10px';
+        t.style.height = `${30 + i * 6}px`;
+        t.style.background = 'linear-gradient(to bottom, #92400e, #f59e0b)';
+        t.style.left = `${8 + i * 12}%`;
+        t.style.bottom = `${5 + (i % 3) * 4}%`;
+        camada.appendChild(t);
+      }
+
+      for (let i = 0; i < anatomiaState.espinhos; i++) {
+        const e = document.createElement('div');
+        e.className = 'absolute w-2 h-6 bg-yellow-900 rounded-full';
+        e.style.right = `${8 + i * 8}%`;
+        e.style.top = `${20 + i * 6}%`;
+        camada.appendChild(e);
+      }
+
+      for (let i = 0; i < anatomiaState.orbitas; i++) {
+        const o = document.createElement('div');
+        o.className = 'absolute rounded-full border-2 border-cyan-300';
+        o.style.width = `${10 + i * 4}px`;
+        o.style.height = o.style.width;
+        o.style.left = `${20 + i * 22}%`;
+        o.style.top = `${55 + (i % 2) * 8}%`;
+        camada.appendChild(o);
+      }
+    }
+
+    function evoluirAnatomia() {
+      anatomiaState.chifres = Math.max(0, Math.min(4, anatomiaState.chifres + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.tentaculos = Math.max(0, Math.min(8, anatomiaState.tentaculos + (Math.random() < 0.6 ? 1 : 0)));
+      anatomiaState.orbitas = Math.max(0, Math.min(5, anatomiaState.orbitas + (Math.random() < 0.4 ? 1 : -1)));
+      anatomiaState.espinhos = Math.max(0, Math.min(10, anatomiaState.espinhos + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.dentes = Math.max(0, Math.min(14, anatomiaState.dentes + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.asas = Math.max(0, Math.min(2, anatomiaState.asas + (Math.random() < 0.3 ? 1 : -1)));
+
+      // Ajuste da boca para "anatomia viva"
+      bocaPou.style.boxShadow = `0 0 ${4 + anatomiaState.dentes}px rgba(127,29,29,0.5)`;
+      bocaPou.style.transform = `translateX(-50%) scale(${1 + anatomiaState.dentes * 0.01})`;
+      renderizarAnatomia();
     }
 
     function decidirMutacaoDOM() {
@@ -503,6 +597,7 @@
       } else {
         decidirMutacaoDOM();
       }
+      evoluirAnatomia();
 
       aplicarVisualState();
       renderizarItensVisuais();
@@ -512,6 +607,7 @@
         visualState,
         ambienteState,
         autonomiaCore,
+        anatomiaState,
         estrategia,
         avaliacao,
         totalItens: itensVisuais.length
