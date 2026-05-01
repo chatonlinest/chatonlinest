@@ -196,8 +196,67 @@
             chatWindow.scrollTop = chatWindow.scrollHeight;
         }
 
+
+        function normalizeText(text) {
+            return text
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[̀-ͯ]/g, '')
+                .trim();
+        }
+
+        function getConversationalResponse(input) {
+            const normalized = normalizeText(input);
+
+            const intents = [
+                {
+                    patterns: [/^(oi|ola|opa|e ai|eae|salve|hello|hi)\b/, /\bboa (tarde|noite|dia)\b/],
+                    replies: [
+                        'Oi! Tudo bem? 😊 Como posso te ajudar hoje?',
+                        'Olá! Tudo certo por aí? Me conta o que você precisa.',
+                        'E aí! 👋 Quer conversar ou fazer alguma pergunta específica?'
+                    ]
+                },
+                {
+                    patterns: [/\b(tudo bem|como vai|como vc ta|como voce ta|ta bem|tudo certo)\b/],
+                    replies: [
+                        'Estou bem e pronto para ajudar! 😄 E você, como está?',
+                        'Tudo certo por aqui! Quer que eu te ajude com alguma informação?',
+                        'Estou ótimo! Pode mandar sua dúvida.'
+                    ]
+                },
+                {
+                    patterns: [/\b(obrigado|obrigada|valeu|vlw|thanks)\b/],
+                    replies: [
+                        'De nada! 💚 Se quiser, posso te ajudar com mais alguma coisa.',
+                        'Imagina! Sempre que precisar, estou por aqui.',
+                        'Por nada! Quer continuar?'
+                    ]
+                },
+                {
+                    patterns: [/\b(tchau|ate logo|falou|fui|bye)\b/],
+                    replies: [
+                        'Tchau! 👋 Foi um prazer te ajudar.',
+                        'Até logo! Quando quiser, é só voltar.',
+                        'Falou! Tenha um ótimo dia 😄'
+                    ]
+                }
+            ];
+
+            for (const intent of intents) {
+                if (intent.patterns.some((pattern) => pattern.test(normalized))) {
+                    return intent.replies[Math.floor(Math.random() * intent.replies.length)];
+                }
+            }
+
+            return null;
+        }
+
         // 6. Motor de Busca Semântica (RAG Simples)
         function getBotResponse(input) {
+            const conversationalReply = getConversationalResponse(input);
+            if (conversationalReply) return conversationalReply;
+
             if (knowledgeBase.length === 0) return "Aguarde, estou construindo a matriz de similaridade...";
 
             const inputVector = calculateTFIDF(extractTokens(input));
@@ -216,7 +275,7 @@
 
             // Se nenhuma similaridade matemática forte for encontrada
             if (results.length === 0 || results[0].score < 0.15) {
-                return "Minha análise semântica não encontrou correlação forte para isso no texto. Tente reformular com termos mais presentes no documento.";
+                return "Não achei isso no meu texto base, mas posso conversar normalmente também 😊. Se quiser, reformule sua pergunta ou tente outro tema.";
             }
 
             // INTELIGÊNCIA AVANÇADA: Se a pergunta for muito complexa e abranger duas partes diferentes do texto,
