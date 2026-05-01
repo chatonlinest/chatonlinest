@@ -241,6 +241,14 @@
       elementosRemovidos: [],
       elementosAdicionados: []
     };
+    let autonomiaCore = {
+      objetivos: {
+        estabilidade: 0.6,
+        diversidadeVisual: 0.85,
+        complexidade: 0.7
+      },
+      historicoScores: []
+    };
     let runtimeAutonomo = {
       versao: 1,
       criadoEm: new Date().toISOString(),
@@ -278,6 +286,7 @@
         ...visualState,
         itens: itensVisuais,
         ambienteState,
+        autonomiaCore,
         atualizadoEm: new Date().toISOString()
       });
     }
@@ -329,6 +338,14 @@
           brilho: Number(v.ambienteState?.brilho || 1),
           elementosRemovidos: Array.isArray(v.ambienteState?.elementosRemovidos) ? v.ambienteState.elementosRemovidos : [],
           elementosAdicionados: Array.isArray(v.ambienteState?.elementosAdicionados) ? v.ambienteState.elementosAdicionados : []
+        };
+        autonomiaCore = {
+          objetivos: {
+            estabilidade: Number(v.autonomiaCore?.objetivos?.estabilidade || 0.6),
+            diversidadeVisual: Number(v.autonomiaCore?.objetivos?.diversidadeVisual || 0.85),
+            complexidade: Number(v.autonomiaCore?.objetivos?.complexidade || 0.7)
+          },
+          historicoScores: Array.isArray(v.autonomiaCore?.historicoScores) ? v.autonomiaCore.historicoScores.slice(-50) : []
         };
         itensVisuais = Array.isArray(v.itens) ? v.itens : [];
         aplicarVisualState();
@@ -407,7 +424,52 @@
       }
     }
 
+    function mapearFragmentos() {
+      const todos = Array.from(document.body.querySelectorAll('*'));
+      const fragmentos = todos.map((el, idx) => ({
+        idx,
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        classes: (el.className || '').toString().slice(0, 120),
+        area: Math.max(0, el.clientWidth * el.clientHeight)
+      }));
+      const totalArea = fragmentos.reduce((s, f) => s + f.area, 0) || 1;
+      return {
+        totalElementos: fragmentos.length,
+        densidade: Math.min(1, fragmentos.length / 120),
+        cobertura: Math.min(1, totalArea / (window.innerWidth * window.innerHeight * 2)),
+        fragmentos
+      };
+    }
+
+    function avaliarEstadoAutonomo(snapshotDom) {
+      const diversidade = Math.min(1, (itensVisuais.length + ambienteState.elementosAdicionados.length) / 12);
+      const estabilidade = 1 - Math.min(1, ambienteState.elementosRemovidos.length / 12);
+      const complexidadeAtual = Math.min(1, snapshotDom.densidade + snapshotDom.cobertura / 2);
+      const score =
+        (1 - Math.abs(diversidade - autonomiaCore.objetivos.diversidadeVisual)) * 0.4 +
+        (1 - Math.abs(estabilidade - autonomiaCore.objetivos.estabilidade)) * 0.35 +
+        (1 - Math.abs(complexidadeAtual - autonomiaCore.objetivos.complexidade)) * 0.25;
+      autonomiaCore.historicoScores.push(Number(score.toFixed(4)));
+      autonomiaCore.historicoScores = autonomiaCore.historicoScores.slice(-50);
+      return { score, diversidade, estabilidade, complexidadeAtual };
+    }
+
+    function decidirAcaoAvancada(snapshotDom, avaliacao) {
+      const ultimaPontuacao = autonomiaCore.historicoScores[autonomiaCore.historicoScores.length - 2] || 0;
+      const piorou = avaliacao.score < ultimaPontuacao;
+      if (piorou && ambienteState.elementosRemovidos.length > 2) return { tipo: 'reverter_remocao' };
+      if (avaliacao.diversidade < autonomiaCore.objetivos.diversidadeVisual) return { tipo: 'enriquecer_visual' };
+      if (avaliacao.estabilidade < autonomiaCore.objetivos.estabilidade) return { tipo: 'recuperar_interface' };
+      if (snapshotDom.totalElementos < 20) return { tipo: 'adicionar_fragmentos' };
+      return { tipo: 'mutacao_balanceada' };
+    }
+
     async function evoluirVisual() {
+      const snapshotDom = mapearFragmentos();
+      const avaliacao = avaliarEstadoAutonomo(snapshotDom);
+      const estrategia = decidirAcaoAvancada(snapshotDom, avaliacao);
+
       visualState.hue = (visualState.hue + Math.floor(15 + Math.random() * 35)) % 360;
       visualState.escala = Math.max(0.9, Math.min(1.15, visualState.escala + (Math.random() - 0.5) * 0.06));
       visualState.borda = Math.max(6, Math.min(16, visualState.borda + (Math.random() > 0.5 ? 1 : -1)));
@@ -428,7 +490,19 @@
       ambienteState.temaHue = (ambienteState.temaHue + Math.floor(Math.random() * 40)) % 360;
       ambienteState.saturacao = Math.max(0.7, Math.min(1.8, ambienteState.saturacao + (Math.random() - 0.5) * 0.2));
       ambienteState.brilho = Math.max(0.75, Math.min(1.35, ambienteState.brilho + (Math.random() - 0.5) * 0.14));
-      decidirMutacaoDOM();
+      if (estrategia.tipo === 'reverter_remocao' || estrategia.tipo === 'recuperar_interface') {
+        ambienteState.elementosRemovidos.pop();
+      } else if (estrategia.tipo === 'enriquecer_visual') {
+        visualState.brilho = Math.min(1.35, visualState.brilho + 0.05);
+        itensVisuais.push({
+          emoji: ['🧠', '✨', '🔮', '⚛️'][Math.floor(Math.random() * 4)],
+          x: Math.floor(20 + Math.random() * 60),
+          y: Math.floor(10 + Math.random() * 75),
+          tamanho: Math.floor(20 + Math.random() * 14)
+        });
+      } else {
+        decidirMutacaoDOM();
+      }
 
       aplicarVisualState();
       renderizarItensVisuais();
@@ -437,6 +511,9 @@
       await salvarMemoria("evolucao_visual", {
         visualState,
         ambienteState,
+        autonomiaCore,
+        estrategia,
+        avaliacao,
         totalItens: itensVisuais.length
       });
     }
