@@ -151,6 +151,7 @@
       <div id="boca-pou" class="absolute bottom-1/4 left-1/2 transform -translate-x-1/2 
         border-4 border-red-900 rounded-t-full w-24 h-12 sm:w-28 sm:h-14">
       </div>
+      <div id="camada-itens" class="absolute inset-0 pointer-events-none"></div>
 
     </div>
 
@@ -217,6 +218,7 @@
     const memoriaRef = rtdb.ref(`${basePath}/memoria`);
     const codigoRef = rtdb.ref(`${basePath}/codigoFonteAutogerado`);
     const estadoRef = rtdb.ref(`${basePath}/estadoAutonomo`);
+    const visualRef = rtdb.ref(`${basePath}/estadoVisual`);
 
     // --- Variáveis de Estado ---
     let ociosoInterval = null; // Intervalo para comportamentos aleatórios
@@ -225,15 +227,22 @@
     let bloqueioEmocao = false; // Impede que o modo ocioso sobrescreva emoções da IA
     const MAX_MOVIMENTO_PUPILA = 10; // Limite de movimento da pupila
     let memoriaLocal = [];
+    let itensVisuais = [];
+    let visualState = {
+      hue: 0,
+      escala: 1,
+      borda: 10,
+      brilho: 1
+    };
     let runtimeAutonomo = {
       versao: 1,
       criadoEm: new Date().toISOString(),
       instrucoes: "Loop autônomo padrão inicial.",
       decidir: function decidir(ctx) {
-        if (ctx.energia < 35) return { tipo: "falar", frase: "Vou descansar um pouco para recuperar energia." };
+        if (ctx.energia < 35) return { tipo: "olhar" };
         if (Math.random() < 0.2) return { tipo: "pular" };
-        if (Math.random() < 0.35) return { tipo: "olhar" };
-        return { tipo: "falar", frase: "Estou observando e aprendendo por conta própria." };
+        if (Math.random() < 0.7) return { tipo: "evoluir_visual" };
+        return { tipo: "olhar" };
       }
     };
 
@@ -255,6 +264,14 @@
         codigo: codigoStr
       };
       await codigoRef.set(payload);
+    }
+
+    async function salvarEstadoVisual() {
+      await visualRef.set({
+        ...visualState,
+        itens: itensVisuais,
+        atualizadoEm: new Date().toISOString()
+      });
     }
 
     function aplicarCodigoAutonomo(codigoStr) {
@@ -288,6 +305,66 @@
         inicializadoEm: new Date().toISOString(),
         versaoRuntime: runtimeAutonomo.versao || 1
       });
+
+      const snapshotVisual = await lerRef(visualRef);
+      if (snapshotVisual.exists()) {
+        const v = snapshotVisual.val() || {};
+        visualState = {
+          hue: Number(v.hue || 0),
+          escala: Number(v.escala || 1),
+          borda: Number(v.borda || 10),
+          brilho: Number(v.brilho || 1)
+        };
+        itensVisuais = Array.isArray(v.itens) ? v.itens : [];
+        aplicarVisualState();
+        renderizarItensVisuais();
+      }
+    }
+
+    function aplicarVisualState() {
+      const corpoPou = document.getElementById('corpo-pou');
+      corpoPou.style.filter = `hue-rotate(${visualState.hue}deg) saturate(1.2) brightness(${visualState.brilho})`;
+      corpoPou.style.transform = `scale(${visualState.escala})`;
+      corpoPou.style.borderWidth = `${visualState.borda}px`;
+    }
+
+    function renderizarItensVisuais() {
+      const camada = document.getElementById('camada-itens');
+      camada.innerHTML = '';
+      itensVisuais.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'absolute';
+        el.style.left = `${item.x}%`;
+        el.style.top = `${item.y}%`;
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.fontSize = `${item.tamanho}px`;
+        el.textContent = item.emoji;
+        camada.appendChild(el);
+      });
+    }
+
+    async function evoluirVisual() {
+      visualState.hue = (visualState.hue + Math.floor(15 + Math.random() * 35)) % 360;
+      visualState.escala = Math.max(0.9, Math.min(1.15, visualState.escala + (Math.random() - 0.5) * 0.06));
+      visualState.borda = Math.max(6, Math.min(16, visualState.borda + (Math.random() > 0.5 ? 1 : -1)));
+      visualState.brilho = Math.max(0.9, Math.min(1.25, visualState.brilho + (Math.random() - 0.5) * 0.08));
+
+      if (itensVisuais.length < 6 && Math.random() < 0.45) {
+        const emojis = ['⭐', '🛡️', '🧢', '⚙️', '💎', '🔥', '🎀', '🪐'];
+        itensVisuais.push({
+          emoji: emojis[Math.floor(Math.random() * emojis.length)],
+          x: Math.floor(15 + Math.random() * 70),
+          y: Math.floor(8 + Math.random() * 75),
+          tamanho: Math.floor(16 + Math.random() * 18)
+        });
+      } else if (itensVisuais.length > 0 && Math.random() < 0.2) {
+        itensVisuais.splice(Math.floor(Math.random() * itensVisuais.length), 1);
+      }
+
+      aplicarVisualState();
+      renderizarItensVisuais();
+      await salvarEstadoVisual();
+      await salvarMemoria("evolucao_visual", { visualState, totalItens: itensVisuais.length });
     }
 
     /**
@@ -701,8 +778,8 @@
         darSaltito();
       } else if (acao.tipo === "olhar") {
         olharAleatorio();
-      } else if (acao.tipo === "falar") {
-        mostrarBolhaFala(acao.frase || "Estou evoluindo por conta própria.", false);
+      } else if (acao.tipo === "evoluir_visual") {
+        await evoluirVisual();
       }
 
       await salvarMemoria("acao_autonoma", { contexto, acao });
@@ -718,7 +795,7 @@
             if (ctx.humorBloqueado) return { tipo: "olhar" };
             const r = Math.random();
             if (r < 0.2) return { tipo: "pular" };
-            if (r < 0.6) return { tipo: "falar", frase: "Atualizei meu próprio comportamento e continuo evoluindo." };
+            if (r < 0.75) return { tipo: "evoluir_visual" };
             return { tipo: "olhar" };
           }
         };
@@ -784,7 +861,7 @@
       setInterval(piscarOlhos, 2000 + (Math.random() * 5000)); // Pisca a cada 2-7 segundos
       setInterval(() => executarAutonomiaTotal().catch(console.warn), 6000);
       setInterval(() => autoEvoluirCodigo().catch(console.warn), 45000);
-      mostrarBolhaFala("Sistema autônomo iniciado. Vou decidir e evoluir sozinho.", false);
+      setInterval(() => evoluirVisual().catch(console.warn), 15000);
     }
 
     inicializarSistema().catch(err => {
