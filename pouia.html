@@ -270,8 +270,17 @@
       return false;
     }
 
+    async function lerRef(ref) {
+      return new Promise((resolve, reject) => {
+        ref.once('value', resolve, reject);
+      });
+    }
+
     async function carregarEstadoAutonomo() {
-      const [snapshotMemoria, snapshotCodigo] = await Promise.all([memoriaRef.get(), codigoRef.get()]);
+      const [snapshotMemoria, snapshotCodigo] = await Promise.all([
+        lerRef(memoriaRef),
+        lerRef(codigoRef)
+      ]);
       if (snapshotMemoria.exists()) memoriaLocal = snapshotMemoria.val() || [];
       if (snapshotCodigo.exists()) aplicarCodigoAutonomo(snapshotCodigo.val().codigo || "");
       await estadoRef.update({
