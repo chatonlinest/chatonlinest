@@ -373,7 +373,7 @@ async function sendRequest() {
     const patch = await generatePatch(instruction, modifiedContent);
     if (!patch) throw new Error('Modelo não retornou patch válido');
 
-    const newContent = applyPatch(modifiedContent, patch);
+    const newContent = await applyPatchSmart(modifiedContent, patch, instruction);
     modifiedContent = newContent;
 
     addMsg('Patch aplicado. Aqui está o arquivo modificado:', 'bot');
@@ -389,7 +389,7 @@ async function sendRequest() {
 }
 
 async function generatePatch(instruction, content) {
-  const prompt = `Generate ONLY a unified diff patch for this instruction. No explanation, just the diff starting with --- and +++.
+  const prompt = `Generate ONLY a robust unified diff patch for this instruction.\nThe patch must be complete and applicable even when creating new functions/blocks from scratch.\nNo explanation, just the diff starting with --- and +++.
 
 Instruction: ${instruction}
 
@@ -420,6 +420,72 @@ Diff:`;
 
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+}
+
+
+async function applyPatchSmart(original, patchText, instruction) {
+  const cleanPatch = normalizePatch(patchText);
+  const result = Diff.applyPatch(original, cleanPatch);
+  if (result !== false) return result;
+
+  const rebuiltFile = await regenerateFullFile(instruction, original);
+  if (!rebuiltFile) throw new Error('Patch falhou e não foi possível reconstruir o arquivo');
+  return rebuiltFile;
+}
+
+function normalizePatch(patchText) {
+  const trimmed = patchText.trim();
+  if (trimmed.startsWith('```')) {
+    return trimmed
+      .replace(/^```(?:diff)?\n?/i, '')
+      .replace(/\n?```$/, '')
+      .trim();
+  }
+  return trimmed;
+}
+
+async function regenerateFullFile(instruction, content) {
+  const prompt = `Rewrite the FULL file content to satisfy the user instruction.
+Return only the final file text without markdown fences.
+
+Instruction: ${instruction}
+
+Current file:
+
+${content}`;
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 8192
+      }
+    })
+  });
+
+  if (!res.ok) throw new Error(`API error (fallback): ${res.status}`);
+
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  return stripMarkdownFence(text || '');
+}
+
+function stripMarkdownFence(text) {
+  let output = text.trim();
+  if (output.startsWith('```')) {
+    const lines = output.split('\n');
+    lines.shift();
+    if (lines[lines.length - 1]?.trim() === '```') lines.pop();
+    output = lines.join('\n').trim();
+  }
+  return output;
 }
 
 function applyPatch(original, patchText) {
