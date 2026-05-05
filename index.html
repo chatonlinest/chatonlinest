@@ -143,6 +143,17 @@
     gap: 8px;
     min-height: 62px;
   }
+.inline-upload {
+    margin-top: 0;
+    padding: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 .input-box {
     flex: 1;
     background: #2a3942;
@@ -191,9 +202,11 @@
 
   <div class="chat-messages" id="chatMessages"></div>
 
-  <div class="chat-input" id="chatInput" style="display: none;">
+  <div class="chat-input" id="chatInput">
+    <input type="file" id="fileInput" class="file-input" accept=".txt,.js,.py,.html,.css,.json,.md">
+    <button class="upload-btn inline-upload" id="attachBtn" title="Selecionar arquivo">📎</button>
     <div class="input-box">
-      <input type="text" id="userInput" placeholder="Descreva a modificação...">
+      <input type="text" id="userInput" placeholder="Selecione um arquivo, descreva a modificação e envie...">
     </div>
     <button class="send-btn" id="sendBtn">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
@@ -210,47 +223,37 @@ const MODEL = 'gemini-2.5-flash';
 let originalContent = '';
 let originalFileName = '';
 let modifiedContent = '';
+let selectedFile = null;
 
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const chatStatus = document.getElementById('chatStatus');
+const fileInput = document.getElementById('fileInput');
+const attachBtn = document.getElementById('attachBtn');
 
 window.onload = () => {
-  addUploadMsg();
-}
+  addMsg('Selecione um arquivo, escreva seu pedido e clique em enviar.', 'bot');
+};
 
-function addUploadMsg() {
-  const row = document.createElement('div');
-  row.className = 'msg-row bot';
-  row.innerHTML = `
-    <div class="upload-bubble">
-      <div class="bubble-content">Envie um arquivo para começar a editar</div>
-      <input type="file" id="fileInput" class="file-input" accept=".txt,.js,.py,.html,.css,.json,.md">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Escolher arquivo</button>
-    </div>
-  `;
-  chatMessages.appendChild(row);
-
-  document.getElementById('fileInput').addEventListener('change', handleFile);
-}
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', handleFile);
 
 function handleFile(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  selectedFile = file;
   originalFileName = file.name;
   const reader = new FileReader();
   reader.onload = (e) => {
     originalContent = e.target.result;
     modifiedContent = originalContent;
 
-    addMsg(`Arquivo ${file.name} carregado - ${Math.round(file.size/1024)} KB`, 'bot');
-    addMsg('O que você quer modificar neste arquivo?', 'bot');
-
-    chatInput.style.display = 'flex';
-    chatStatus.textContent = 'Online';
+    addMsg(`Arquivo selecionado: ${file.name} - ${Math.round(file.size/1024)} KB`, 'bot');
+    addMsg('Agora descreva a modificação e clique em enviar.', 'bot');
+    chatStatus.textContent = 'Pronto para enviar';
     chatMessages.scrollTop = chatMessages.scrollHeight;
   };
   reader.readAsText(file);
@@ -261,12 +264,12 @@ userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendReque
 
 async function sendRequest() {
   const instruction = userInput.value.trim();
-  if (!instruction ||!originalContent) return;
+  if (!instruction || !selectedFile || !originalContent) return;
 
   addMsg(instruction, 'user');
   userInput.value = '';
   sendBtn.disabled = true;
-  chatStatus.textContent = 'Digitando...';
+  chatStatus.textContent = 'Enviando arquivo e pedido...';
 
   try {
     const patch = await generatePatch(instruction, modifiedContent);
