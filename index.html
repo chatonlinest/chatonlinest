@@ -143,6 +143,17 @@
     gap: 8px;
     min-height: 62px;
   }
+.inline-upload {
+    margin-top: 0;
+    padding: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 .input-box {
     flex: 1;
     background: #2a3942;
@@ -172,6 +183,53 @@
   }
 .send-btn:disabled { background: #374248; cursor: not-allowed; }
 
+.settings-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: #2a3942;
+  color: #e9edef;
+  cursor: pointer;
+  font-size: 16px;
+}
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 99;
+}
+.settings-card {
+  width: min(92vw, 420px);
+  background: #202c33;
+  border-radius: 10px;
+  padding: 16px;
+}
+.settings-card h3 { margin-bottom: 12px; }
+.settings-card label { display: block; font-size: 13px; color: #9cb0ba; margin-bottom: 6px; }
+.settings-card input {
+  width: 100%;
+  background: #2a3942;
+  border: 1px solid #374248;
+  border-radius: 8px;
+  color: #e9edef;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.settings-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.settings-actions button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+#saveSettingsBtn { background: #00a884; color: #fff; }
+#closeSettingsBtn { background: #374248; color: #fff; }
+
+
   @media (max-width: 768px) {
 .bubble { max-width: 85%; }
 .chat-messages { padding: 12px 16px; }
@@ -187,13 +245,16 @@
       <div class="chat-name">ST-Bot</div>
       <div class="chat-status" id="chatStatus">Aguardando arquivo</div>
     </div>
+    <button class="settings-btn" id="settingsBtn" title="Configurações">⚙️</button>
   </div>
 
   <div class="chat-messages" id="chatMessages"></div>
 
-  <div class="chat-input" id="chatInput" style="display: none;">
+  <div class="chat-input" id="chatInput">
+    <input type="file" id="fileInput" class="file-input" accept=".txt,.js,.py,.html,.css,.json,.md">
+    <button class="upload-btn inline-upload" id="attachBtn" title="Selecionar arquivo">📎</button>
     <div class="input-box">
-      <input type="text" id="userInput" placeholder="Descreva a modificação...">
+      <input type="text" id="userInput" placeholder="Selecione um arquivo, descreva a modificação e envie...">
     </div>
     <button class="send-btn" id="sendBtn">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
@@ -203,54 +264,89 @@
   </div>
 </div>
 
+
+<div class="settings-modal" id="settingsModal">
+  <div class="settings-card">
+    <h3>Configurações da API</h3>
+    <label for="apiKeyInput">Chave da API</label>
+    <input type="password" id="apiKeyInput" placeholder="Cole sua chave aqui">
+    <label for="modelInput">Modelo</label>
+    <input type="text" id="modelInput" placeholder="Ex: gemini-2.5-flash">
+    <div class="settings-actions">
+      <button id="closeSettingsBtn">Cancelar</button>
+      <button id="saveSettingsBtn">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const API_KEY = 'AIzaSyAgj0ikQBUl5zJJn9yeN8C2msHaW5nFKTs';
-const MODEL = 'gemini-2.5-flash';
+let apiKey = localStorage.getItem('stbot_api_key') || '';
+let modelName = localStorage.getItem('stbot_model_name') || '';
 
 let originalContent = '';
 let originalFileName = '';
 let modifiedContent = '';
+let selectedFile = null;
 
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const chatStatus = document.getElementById('chatStatus');
+const fileInput = document.getElementById('fileInput');
+const attachBtn = document.getElementById('attachBtn');
+
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsModal = document.getElementById('settingsModal');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const modelInput = document.getElementById('modelInput');
+const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+settingsBtn.addEventListener('click', () => {
+  apiKeyInput.value = apiKey;
+  modelInput.value = modelName;
+  settingsModal.style.display = 'flex';
+});
+
+closeSettingsBtn.addEventListener('click', () => {
+  settingsModal.style.display = 'none';
+});
+
+saveSettingsBtn.addEventListener('click', () => {
+  apiKey = apiKeyInput.value.trim();
+  modelName = modelInput.value.trim();
+  localStorage.setItem('stbot_api_key', apiKey);
+  localStorage.setItem('stbot_model_name', modelName);
+  settingsModal.style.display = 'none';
+  chatStatus.textContent = apiKey && modelName ? 'Configuração salva' : 'Configure API e modelo';
+});
 
 window.onload = () => {
-  addUploadMsg();
-}
+  addMsg('Selecione um arquivo, escreva seu pedido e clique em enviar.', 'bot');
+  if (!apiKey || !modelName) {
+    addMsg('Abra ⚙️ Configurações e salve sua chave API e o modelo antes de enviar.', 'bot');
+    chatStatus.textContent = 'Configure API e modelo';
+  }
+};
 
-function addUploadMsg() {
-  const row = document.createElement('div');
-  row.className = 'msg-row bot';
-  row.innerHTML = `
-    <div class="upload-bubble">
-      <div class="bubble-content">Envie um arquivo para começar a editar</div>
-      <input type="file" id="fileInput" class="file-input" accept=".txt,.js,.py,.html,.css,.json,.md">
-      <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Escolher arquivo</button>
-    </div>
-  `;
-  chatMessages.appendChild(row);
-
-  document.getElementById('fileInput').addEventListener('change', handleFile);
-}
+attachBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', handleFile);
 
 function handleFile(e) {
   const file = e.target.files[0];
   if (!file) return;
 
+  selectedFile = file;
   originalFileName = file.name;
   const reader = new FileReader();
   reader.onload = (e) => {
     originalContent = e.target.result;
     modifiedContent = originalContent;
 
-    addMsg(`Arquivo ${file.name} carregado - ${Math.round(file.size/1024)} KB`, 'bot');
-    addMsg('O que você quer modificar neste arquivo?', 'bot');
-
-    chatInput.style.display = 'flex';
-    chatStatus.textContent = 'Online';
+    addMsg(`Arquivo selecionado: ${file.name} - ${Math.round(file.size/1024)} KB`, 'bot');
+    addMsg('Agora descreva a modificação e clique em enviar.', 'bot');
+    chatStatus.textContent = 'Pronto para enviar';
     chatMessages.scrollTop = chatMessages.scrollHeight;
   };
   reader.readAsText(file);
@@ -261,12 +357,17 @@ userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendReque
 
 async function sendRequest() {
   const instruction = userInput.value.trim();
-  if (!instruction ||!originalContent) return;
+  if (!apiKey || !modelName) {
+    addMsg('Configure e salve a chave API e o modelo em ⚙️ Configurações.', 'bot');
+    return;
+  }
+
+  if (!instruction || !selectedFile || !originalContent) return;
 
   addMsg(instruction, 'user');
   userInput.value = '';
   sendBtn.disabled = true;
-  chatStatus.textContent = 'Digitando...';
+  chatStatus.textContent = 'Enviando arquivo e pedido...';
 
   try {
     const patch = await generatePatch(instruction, modifiedContent);
@@ -299,7 +400,7 @@ ${content}
 
 Diff:`;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
 
   const res = await fetch(url, {
     method: 'POST',
