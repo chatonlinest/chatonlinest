@@ -6,6 +6,8 @@
   <title>Pou.IA</title>
   <!-- Carregando Tailwind CSS para estilo moderno e responsivo -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.0.0/firebase-database.js"></script>
   <!-- Carregando a fonte Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -149,6 +151,9 @@
       <div id="boca-pou" class="absolute bottom-1/4 left-1/2 transform -translate-x-1/2 
         border-4 border-red-900 rounded-t-full w-24 h-12 sm:w-28 sm:h-14">
       </div>
+      <div id="camada-itens" class="absolute inset-0 pointer-events-none"></div>
+      <div id="camada-anatomia" class="absolute inset-0 pointer-events-none"></div>
+      <div id="camada-ambiente" class="absolute -inset-10 pointer-events-none"></div>
 
     </div>
 
@@ -193,12 +198,421 @@
     const chaveDaApi = "AIzaSyCjnBaOBZkM_qpN2FDLMptfQMgxzQ90ZsQ"; // Chave da API (deixe em branco, será gerenciado pelo ambiente)
     const urlDaApi = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${chaveDaApi}`;
 
+    // --- Configuração Firebase RTDB (persistência de memória e auto-evolução) ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyCeDWypTlIp0w8nebFFXEkmJWSpScBTHfI",
+      authDomain: "seu-projeto.firebaseapp.com",
+      databaseURL: "https://stevest-sr-default-rtdb.firebaseio.com",
+      projectId: "seu-projeto",
+      storageBucket: "stevest-sr.appspot.com",
+      messagingSenderId: "seu-sender-id",
+      appId: "1:227540325631:android:e8c018a5cbd147aaa728ca"
+    };
+
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+
+    const rtdb = firebase.database();
+    const identityId = localStorage.getItem("pouia_identity") || crypto.randomUUID();
+    localStorage.setItem("pouia_identity", identityId);
+    const basePath = `pouia/${identityId}`;
+    const memoriaRef = rtdb.ref(`${basePath}/memoria`);
+    const codigoRef = rtdb.ref(`${basePath}/codigoFonteAutogerado`);
+    const estadoRef = rtdb.ref(`${basePath}/estadoAutonomo`);
+    const visualRef = rtdb.ref(`${basePath}/estadoVisual`);
+
     // --- Variáveis de Estado ---
     let ociosoInterval = null; // Intervalo para comportamentos aleatórios
     let estaInteragindo = true; // Flag para saber se o usuário está interagindo
     let interacaoTimer = null; // Timer para detectar o início da ociosidade
     let bloqueioEmocao = false; // Impede que o modo ocioso sobrescreva emoções da IA
     const MAX_MOVIMENTO_PUPILA = 10; // Limite de movimento da pupila
+    let memoriaLocal = [];
+    let itensVisuais = [];
+    let visualState = {
+      hue: 0,
+      escala: 1,
+      borda: 10,
+      brilho: 1
+    };
+    let ambienteState = {
+      temaHue: 0,
+      saturacao: 1,
+      brilho: 1,
+      elementosRemovidos: [],
+      elementosAdicionados: []
+    };
+    let autonomiaCore = {
+      objetivos: {
+        estabilidade: 0.6,
+        diversidadeVisual: 0.85,
+        complexidade: 0.7
+      },
+      historicoScores: []
+    };
+    let anatomiaState = {
+      chifres: 1,
+      tentaculos: 2,
+      orbitas: 1,
+      dentes: 4,
+      espinhos: 3,
+      asas: 0
+    };
+    let runtimeAutonomo = {
+      versao: 1,
+      criadoEm: new Date().toISOString(),
+      instrucoes: "Loop autônomo padrão inicial.",
+      decidir: function decidir(ctx) {
+        if (ctx.energia < 35) return { tipo: "olhar" };
+        if (Math.random() < 0.2) return { tipo: "pular" };
+        if (Math.random() < 0.7) return { tipo: "evoluir_visual" };
+        return { tipo: "olhar" };
+      }
+    };
+
+    async function salvarMemoria(evento, dados = {}) {
+      const entrada = {
+        evento,
+        dados,
+        timestamp: Date.now()
+      };
+      memoriaLocal.push(entrada);
+      if (memoriaLocal.length > 100) memoriaLocal.shift();
+      await memoriaRef.set(memoriaLocal);
+    }
+
+    async function salvarCodigoAutonomo(codigoStr, motivo = "auto-evolucao") {
+      const payload = {
+        motivo,
+        atualizadoEm: new Date().toISOString(),
+        codigo: codigoStr
+      };
+      await codigoRef.set(payload);
+    }
+
+    async function salvarEstadoVisual() {
+      await visualRef.set({
+        ...visualState,
+        itens: itensVisuais,
+        ambienteState,
+        autonomiaCore,
+        anatomiaState,
+        atualizadoEm: new Date().toISOString()
+      });
+    }
+
+    function aplicarCodigoAutonomo(codigoStr) {
+      try {
+        const novoRuntime = new Function(`"use strict"; ${codigoStr}; return runtimeAutonomo;`)();
+        if (novoRuntime && typeof novoRuntime.decidir === "function") {
+          runtimeAutonomo = novoRuntime;
+          return true;
+        }
+      } catch (erro) {
+        console.warn("Falha ao aplicar código autônomo salvo:", erro);
+      }
+      return false;
+    }
+
+    async function lerRef(ref) {
+      return new Promise((resolve, reject) => {
+        ref.once('value', resolve, reject);
+      });
+    }
+
+    async function carregarEstadoAutonomo() {
+      const [snapshotMemoria, snapshotCodigo] = await Promise.all([
+        lerRef(memoriaRef),
+        lerRef(codigoRef)
+      ]);
+      if (snapshotMemoria.exists()) memoriaLocal = snapshotMemoria.val() || [];
+      if (snapshotCodigo.exists()) aplicarCodigoAutonomo(snapshotCodigo.val().codigo || "");
+      await estadoRef.update({
+        online: true,
+        inicializadoEm: new Date().toISOString(),
+        versaoRuntime: runtimeAutonomo.versao || 1
+      });
+
+      const snapshotVisual = await lerRef(visualRef);
+      if (snapshotVisual.exists()) {
+        const v = snapshotVisual.val() || {};
+        visualState = {
+          hue: Number(v.hue || 0),
+          escala: Number(v.escala || 1),
+          borda: Number(v.borda || 10),
+          brilho: Number(v.brilho || 1)
+        };
+        ambienteState = {
+          temaHue: Number(v.ambienteState?.temaHue || 0),
+          saturacao: Number(v.ambienteState?.saturacao || 1),
+          brilho: Number(v.ambienteState?.brilho || 1),
+          elementosRemovidos: Array.isArray(v.ambienteState?.elementosRemovidos) ? v.ambienteState.elementosRemovidos : [],
+          elementosAdicionados: Array.isArray(v.ambienteState?.elementosAdicionados) ? v.ambienteState.elementosAdicionados : []
+        };
+        autonomiaCore = {
+          objetivos: {
+            estabilidade: Number(v.autonomiaCore?.objetivos?.estabilidade || 0.6),
+            diversidadeVisual: Number(v.autonomiaCore?.objetivos?.diversidadeVisual || 0.85),
+            complexidade: Number(v.autonomiaCore?.objetivos?.complexidade || 0.7)
+          },
+          historicoScores: Array.isArray(v.autonomiaCore?.historicoScores) ? v.autonomiaCore.historicoScores.slice(-50) : []
+        };
+        anatomiaState = {
+          chifres: Number(v.anatomiaState?.chifres || 1),
+          tentaculos: Number(v.anatomiaState?.tentaculos || 2),
+          orbitas: Number(v.anatomiaState?.orbitas || 1),
+          dentes: Number(v.anatomiaState?.dentes || 4),
+          espinhos: Number(v.anatomiaState?.espinhos || 3),
+          asas: Number(v.anatomiaState?.asas || 0)
+        };
+        itensVisuais = Array.isArray(v.itens) ? v.itens : [];
+        aplicarVisualState();
+        renderizarItensVisuais();
+        renderizarAnatomia();
+        aplicarEstadoAmbiente();
+      }
+    }
+
+    function aplicarVisualState() {
+      const corpoPou = document.getElementById('corpo-pou');
+      corpoPou.style.filter = `hue-rotate(${visualState.hue}deg) saturate(1.2) brightness(${visualState.brilho})`;
+      corpoPou.style.transform = `scale(${visualState.escala})`;
+      corpoPou.style.borderWidth = `${visualState.borda}px`;
+    }
+
+    function renderizarItensVisuais() {
+      const camada = document.getElementById('camada-itens');
+      camada.innerHTML = '';
+      itensVisuais.forEach((item) => {
+        const el = document.createElement('div');
+        el.className = 'absolute';
+        el.style.left = `${item.x}%`;
+        el.style.top = `${item.y}%`;
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.fontSize = `${item.tamanho}px`;
+        el.textContent = item.emoji;
+        camada.appendChild(el);
+      });
+    }
+
+    function aplicarEstadoAmbiente() {
+      document.body.style.filter = `hue-rotate(${ambienteState.temaHue}deg) saturate(${ambienteState.saturacao}) brightness(${ambienteState.brilho})`;
+
+      ambienteState.elementosRemovidos.forEach((seletor) => {
+        if (seletor === "#aplicacao-pou" || seletor === "body") return;
+        document.querySelectorAll(seletor).forEach((el) => el.remove());
+      });
+
+      const palco = document.getElementById('container-pou');
+      const camadaAmbiente = document.getElementById('camada-ambiente');
+      camadaAmbiente.innerHTML = '';
+      for (let i = 0; i < Math.min(12, ambienteState.elementosAdicionados.length); i++) {
+        const aura = document.createElement('div');
+        aura.className = 'absolute rounded-full';
+        aura.style.left = `${Math.floor(Math.random() * 100)}%`;
+        aura.style.top = `${Math.floor(Math.random() * 100)}%`;
+        aura.style.width = `${20 + Math.floor(Math.random() * 80)}px`;
+        aura.style.height = aura.style.width;
+        aura.style.opacity = `${0.08 + Math.random() * 0.2}`;
+        aura.style.background = 'radial-gradient(circle, rgba(253,224,71,0.5), transparent 70%)';
+        camadaAmbiente.appendChild(aura);
+      }
+      ambienteState.elementosAdicionados.forEach((extra) => {
+        if (!palco || !extra?.id || document.getElementById(extra.id)) return;
+        const el = document.createElement('div');
+        el.id = extra.id;
+        el.className = 'absolute pointer-events-none select-none';
+        el.style.left = `${extra.x}%`;
+        el.style.top = `${extra.y}%`;
+        el.style.fontSize = `${extra.tamanho}px`;
+        el.style.transform = 'translate(-50%, -50%)';
+        el.textContent = extra.emoji || '✨';
+        palco.appendChild(el);
+      });
+    }
+
+    function renderizarAnatomia() {
+      const camada = document.getElementById('camada-anatomia');
+      camada.innerHTML = '';
+
+      for (let i = 0; i < anatomiaState.chifres; i++) {
+        const chifre = document.createElement('div');
+        chifre.className = 'absolute';
+        chifre.style.width = '0';
+        chifre.style.height = '0';
+        chifre.style.borderLeft = '10px solid transparent';
+        chifre.style.borderRight = '10px solid transparent';
+        chifre.style.borderBottom = `${24 + i * 2}px solid rgba(120,53,15,0.9)`;
+        chifre.style.left = `${35 + i * 18}%`;
+        chifre.style.top = `${3 + (i % 2) * 2}%`;
+        camada.appendChild(chifre);
+      }
+
+      for (let i = 0; i < anatomiaState.tentaculos; i++) {
+        const t = document.createElement('div');
+        t.className = 'absolute rounded-full';
+        t.style.width = '10px';
+        t.style.height = `${30 + i * 6}px`;
+        t.style.background = 'linear-gradient(to bottom, #92400e, #f59e0b)';
+        t.style.left = `${8 + i * 12}%`;
+        t.style.bottom = `${5 + (i % 3) * 4}%`;
+        camada.appendChild(t);
+      }
+
+      for (let i = 0; i < anatomiaState.espinhos; i++) {
+        const e = document.createElement('div');
+        e.className = 'absolute w-2 h-6 bg-yellow-900 rounded-full';
+        e.style.right = `${8 + i * 8}%`;
+        e.style.top = `${20 + i * 6}%`;
+        camada.appendChild(e);
+      }
+
+      for (let i = 0; i < anatomiaState.orbitas; i++) {
+        const o = document.createElement('div');
+        o.className = 'absolute rounded-full border-2 border-cyan-300';
+        o.style.width = `${10 + i * 4}px`;
+        o.style.height = o.style.width;
+        o.style.left = `${20 + i * 22}%`;
+        o.style.top = `${55 + (i % 2) * 8}%`;
+        camada.appendChild(o);
+      }
+    }
+
+    function evoluirAnatomia() {
+      anatomiaState.chifres = Math.max(0, Math.min(4, anatomiaState.chifres + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.tentaculos = Math.max(0, Math.min(8, anatomiaState.tentaculos + (Math.random() < 0.6 ? 1 : 0)));
+      anatomiaState.orbitas = Math.max(0, Math.min(5, anatomiaState.orbitas + (Math.random() < 0.4 ? 1 : -1)));
+      anatomiaState.espinhos = Math.max(0, Math.min(10, anatomiaState.espinhos + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.dentes = Math.max(0, Math.min(14, anatomiaState.dentes + (Math.random() < 0.5 ? 1 : -1)));
+      anatomiaState.asas = Math.max(0, Math.min(2, anatomiaState.asas + (Math.random() < 0.3 ? 1 : -1)));
+
+      // Ajuste da boca para "anatomia viva"
+      bocaPou.style.boxShadow = `0 0 ${4 + anatomiaState.dentes}px rgba(127,29,29,0.5)`;
+      bocaPou.style.transform = `translateX(-50%) scale(${1 + anatomiaState.dentes * 0.01})`;
+      renderizarAnatomia();
+    }
+
+    function decidirMutacaoDOM() {
+      const candidatos = [
+        '#bolha-fala',
+        '#form-chat',
+        '#camada-itens',
+        '#boca-pou',
+        '.pou-eye'
+      ];
+      const manter = ['#aplicacao-pou', '#container-pou', '#corpo-pou'];
+      const alvo = candidatos[Math.floor(Math.random() * candidatos.length)];
+      if (!manter.includes(alvo) && Math.random() < 0.18 && !ambienteState.elementosRemovidos.includes(alvo)) {
+        ambienteState.elementosRemovidos.push(alvo);
+      }
+
+      if (ambienteState.elementosAdicionados.length < 10 && Math.random() < 0.55) {
+        ambienteState.elementosAdicionados.push({
+          id: `addon-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+          emoji: ['⚡', '🧬', '🌌', '🌀', '🧠', '☄️'][Math.floor(Math.random() * 6)],
+          x: Math.floor(5 + Math.random() * 90),
+          y: Math.floor(5 + Math.random() * 90),
+          tamanho: Math.floor(14 + Math.random() * 30)
+        });
+      }
+    }
+
+    function mapearFragmentos() {
+      const todos = Array.from(document.body.querySelectorAll('*'));
+      const fragmentos = todos.map((el, idx) => ({
+        idx,
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        classes: (el.className || '').toString().slice(0, 120),
+        area: Math.max(0, el.clientWidth * el.clientHeight)
+      }));
+      const totalArea = fragmentos.reduce((s, f) => s + f.area, 0) || 1;
+      return {
+        totalElementos: fragmentos.length,
+        densidade: Math.min(1, fragmentos.length / 120),
+        cobertura: Math.min(1, totalArea / (window.innerWidth * window.innerHeight * 2)),
+        fragmentos
+      };
+    }
+
+    function avaliarEstadoAutonomo(snapshotDom) {
+      const diversidade = Math.min(1, (itensVisuais.length + ambienteState.elementosAdicionados.length) / 12);
+      const estabilidade = 1 - Math.min(1, ambienteState.elementosRemovidos.length / 12);
+      const complexidadeAtual = Math.min(1, snapshotDom.densidade + snapshotDom.cobertura / 2);
+      const score =
+        (1 - Math.abs(diversidade - autonomiaCore.objetivos.diversidadeVisual)) * 0.4 +
+        (1 - Math.abs(estabilidade - autonomiaCore.objetivos.estabilidade)) * 0.35 +
+        (1 - Math.abs(complexidadeAtual - autonomiaCore.objetivos.complexidade)) * 0.25;
+      autonomiaCore.historicoScores.push(Number(score.toFixed(4)));
+      autonomiaCore.historicoScores = autonomiaCore.historicoScores.slice(-50);
+      return { score, diversidade, estabilidade, complexidadeAtual };
+    }
+
+    function decidirAcaoAvancada(snapshotDom, avaliacao) {
+      const ultimaPontuacao = autonomiaCore.historicoScores[autonomiaCore.historicoScores.length - 2] || 0;
+      const piorou = avaliacao.score < ultimaPontuacao;
+      if (piorou && ambienteState.elementosRemovidos.length > 2) return { tipo: 'reverter_remocao' };
+      if (avaliacao.diversidade < autonomiaCore.objetivos.diversidadeVisual) return { tipo: 'enriquecer_visual' };
+      if (avaliacao.estabilidade < autonomiaCore.objetivos.estabilidade) return { tipo: 'recuperar_interface' };
+      if (snapshotDom.totalElementos < 20) return { tipo: 'adicionar_fragmentos' };
+      return { tipo: 'mutacao_balanceada' };
+    }
+
+    async function evoluirVisual() {
+      const snapshotDom = mapearFragmentos();
+      const avaliacao = avaliarEstadoAutonomo(snapshotDom);
+      const estrategia = decidirAcaoAvancada(snapshotDom, avaliacao);
+
+      visualState.hue = (visualState.hue + Math.floor(15 + Math.random() * 35)) % 360;
+      visualState.escala = Math.max(0.9, Math.min(1.15, visualState.escala + (Math.random() - 0.5) * 0.06));
+      visualState.borda = Math.max(6, Math.min(16, visualState.borda + (Math.random() > 0.5 ? 1 : -1)));
+      visualState.brilho = Math.max(0.9, Math.min(1.25, visualState.brilho + (Math.random() - 0.5) * 0.08));
+
+      if (itensVisuais.length < 6 && Math.random() < 0.45) {
+        const emojis = ['⭐', '🛡️', '🧢', '⚙️', '💎', '🔥', '🎀', '🪐'];
+        itensVisuais.push({
+          emoji: emojis[Math.floor(Math.random() * emojis.length)],
+          x: Math.floor(15 + Math.random() * 70),
+          y: Math.floor(8 + Math.random() * 75),
+          tamanho: Math.floor(16 + Math.random() * 18)
+        });
+      } else if (itensVisuais.length > 0 && Math.random() < 0.2) {
+        itensVisuais.splice(Math.floor(Math.random() * itensVisuais.length), 1);
+      }
+
+      ambienteState.temaHue = (ambienteState.temaHue + Math.floor(Math.random() * 40)) % 360;
+      ambienteState.saturacao = Math.max(0.7, Math.min(1.8, ambienteState.saturacao + (Math.random() - 0.5) * 0.2));
+      ambienteState.brilho = Math.max(0.75, Math.min(1.35, ambienteState.brilho + (Math.random() - 0.5) * 0.14));
+      if (estrategia.tipo === 'reverter_remocao' || estrategia.tipo === 'recuperar_interface') {
+        ambienteState.elementosRemovidos.pop();
+      } else if (estrategia.tipo === 'enriquecer_visual') {
+        visualState.brilho = Math.min(1.35, visualState.brilho + 0.05);
+        itensVisuais.push({
+          emoji: ['🧠', '✨', '🔮', '⚛️'][Math.floor(Math.random() * 4)],
+          x: Math.floor(20 + Math.random() * 60),
+          y: Math.floor(10 + Math.random() * 75),
+          tamanho: Math.floor(20 + Math.random() * 14)
+        });
+      } else {
+        decidirMutacaoDOM();
+      }
+      evoluirAnatomia();
+
+      aplicarVisualState();
+      renderizarItensVisuais();
+      aplicarEstadoAmbiente();
+      await salvarEstadoVisual();
+      await salvarMemoria("evolucao_visual", {
+        visualState,
+        ambienteState,
+        autonomiaCore,
+        anatomiaState,
+        estrategia,
+        avaliacao,
+        totalItens: itensVisuais.length
+      });
+    }
 
     /**
      * Move as pupilas do Pou seguindo o cursor/touch.
@@ -441,6 +855,7 @@
 
         const promptUsuario = inputChat.value.trim();
         if (!promptUsuario) return;
+        await salvarMemoria("usuario_prompt", { texto: promptUsuario });
 
         inputChat.value = '';
         inputChat.disabled = true;
@@ -457,6 +872,7 @@
             console.error("Erro ao chamar IA:", error);
             mostrarBolhaFala("Tive um curto-circuito! Tente de novo.", false);
             resetarExpressao();
+            await salvarMemoria("erro_ia", { erro: String(error) });
         } finally {
             // Reativa a UI
             inputChat.disabled = false;
@@ -593,6 +1009,50 @@
         // Mostra a fala e aciona a reação
         mostrarBolhaFala(textoVisivel, false);
         reagirComEmocao(emocao);
+        salvarMemoria("resposta_ia", { emocao, texto: textoVisivel }).catch(console.warn);
+    }
+
+    async function executarAutonomiaTotal() {
+      const contexto = {
+        energia: Math.floor(20 + Math.random() * 80),
+        humorBloqueado: bloqueioEmocao,
+        ultimaMemoria: memoriaLocal[memoriaLocal.length - 1] || null
+      };
+
+      const acao = runtimeAutonomo.decidir(contexto) || { tipo: "olhar" };
+
+      if (acao.tipo === "pular") {
+        darSaltito();
+      } else if (acao.tipo === "olhar") {
+        olharAleatorio();
+      } else if (acao.tipo === "evoluir_visual") {
+        await evoluirVisual();
+      }
+
+      await salvarMemoria("acao_autonoma", { contexto, acao });
+    }
+
+    async function autoEvoluirCodigo() {
+      const novoCodigo = `
+        const runtimeAutonomo = {
+          versao: ${(runtimeAutonomo.versao || 1) + 1},
+          criadoEm: "${new Date().toISOString()}",
+          instrucoes: "Runtime evoluído automaticamente e persistido no RTDB.",
+          decidir: function decidir(ctx) {
+            if (ctx.humorBloqueado) return { tipo: "olhar" };
+            const r = Math.random();
+            if (r < 0.2) return { tipo: "pular" };
+            if (r < 0.75) return { tipo: "evoluir_visual" };
+            return { tipo: "olhar" };
+          }
+        };
+      `;
+
+      const aplicado = aplicarCodigoAutonomo(novoCodigo);
+      if (aplicado) {
+        await salvarCodigoAutonomo(novoCodigo);
+        await salvarMemoria("auto_evolucao", { versao: runtimeAutonomo.versao });
+      }
     }
 
     /**
@@ -642,11 +1102,19 @@
     formChat.addEventListener('submit', lidarComEnvioChat);
     inputChat.addEventListener('focus', marcarInteracaoUsuario); // Para o Pou ocioso ao digitar
 
-    // Inicia o timer de ociosidade pela primeira vez
-    reiniciarTimerOcioso();
+    async function inicializarSistema() {
+      await carregarEstadoAutonomo();
+      reiniciarTimerOcioso();
+      setInterval(piscarOlhos, 2000 + (Math.random() * 5000)); // Pisca a cada 2-7 segundos
+      setInterval(() => executarAutonomiaTotal().catch(console.warn), 6000);
+      setInterval(() => autoEvoluirCodigo().catch(console.warn), 45000);
+      setInterval(() => evoluirVisual().catch(console.warn), 15000);
+    }
 
-    // Loop autônomo de PISCAR (sempre ativo)
-    setInterval(piscarOlhos, 2000 + (Math.random() * 5000)); // Pisca a cada 2-7 segundos
+    inicializarSistema().catch(err => {
+      console.error("Falha ao inicializar sistema autônomo:", err);
+      mostrarBolhaFala("Não consegui iniciar minha autonomia total.", false);
+    });
 
   </script>
 
