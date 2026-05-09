@@ -822,15 +822,11 @@ async function sendRequest() {
   showTyping();
 
   try {
-    const patch = await generatePatch(instruction, modifiedContent);
+    const { content: newContent, attempts } = await applyPatchWithRetry(instruction, modifiedContent, originalFileName);
     removeTyping();
-    if (!patch) throw new Error('Modelo não retornou patch válido');
-
-    const newContent = applyPatch(modifiedContent, patch);
-    validatePatchedCode(newContent, originalFileName);
     modifiedContent  = newContent;
 
-    addBotMsg('Patch aplicado com sucesso. Arquivo modificado pronto:');
+    addBotMsg(`Patch aplicado com sucesso (${attempts} tentativa${attempts > 1 ? 's' : ''}). Arquivo modificado pronto:`);
     addFileMsg(newContent, `modificado_${originalFileName}`);
   } catch (err) {
     removeTyping();
@@ -842,8 +838,52 @@ async function sendRequest() {
   sendBtn.disabled       = !userInput.value.trim();
 }
 
+async function applyPatchWithRetry(instruction, baseContent, filename) {
+  const maxAttempts = 6;
+  let lastError = '';
+  let lastPatch = '';
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const patch = await generatePatch(instruction, baseContent, {
+      lastError,
+      lastPatch,
+      attempt,
+      maxAttempts
+    });
+    if (!patch) {
+      lastError = 'Modelo não retornou patch válido.';
+      continue;
+    }
+
+    try {
+      const newContent = applyPatch(baseContent, patch);
+      validatePatchedCode(newContent, filename);
+      return { content: newContent, attempts: attempt };
+    } catch (err) {
+      lastError = err.message || String(err);
+      lastPatch = patch;
+    }
+  }
+
+  throw new Error(`Falha ao gerar um patch válido após ${maxAttempts} tentativas. Último erro: ${lastError}`);
+}
+
 // ── API ────────────────────────────────────────────
-async function generatePatch(instruction, content) {
+async function generatePatch(instruction, content, retryCtx = null) {
+  const retryBlock = retryCtx
+    ? `
+
+Retry context:
+- Attempt: ${retryCtx.attempt}/${retryCtx.maxAttempts}
+- Previous error: ${retryCtx.lastError || 'none'}
+- Previous patch (may be invalid):
+\`\`\`
+${retryCtx.lastPatch || '(empty)'}
+\`\`\`
+
+Generate a corrected patch that fixes the previous error.`
+    : '';
+
   const prompt = `Generate ONLY a unified diff patch for this instruction. No explanation, no markdown, just the raw diff starting with --- and +++.
 
 Instruction: ${instruction}
@@ -852,6 +892,7 @@ File:
 \`\`\`
 ${content}
 \`\`\`
+${retryBlock}
 
 Diff:`;
 
