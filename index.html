@@ -827,6 +827,7 @@ async function sendRequest() {
     if (!patch) throw new Error('Modelo não retornou patch válido');
 
     const newContent = applyPatch(modifiedContent, patch);
+    validatePatchedCode(newContent, originalFileName);
     modifiedContent  = newContent;
 
     addBotMsg('Patch aplicado com sucesso. Arquivo modificado pronto:');
@@ -913,6 +914,41 @@ function splitUnifiedDiffs(patchText) {
   }
 
   return patches;
+}
+
+function validatePatchedCode(content, filename) {
+  const name = (filename || '').toLowerCase();
+  const isJavaScriptFile =
+    name.endsWith('.js') ||
+    name.endsWith('.mjs') ||
+    name.endsWith('.cjs') ||
+    name.endsWith('.jsx');
+
+  if (!isJavaScriptFile) return;
+
+  const syntaxCheck = checkJavaScriptSyntax(content);
+  if (!syntaxCheck.ok) {
+    throw new Error(
+      `Patch recusado: erro de sintaxe JavaScript na linha ${syntaxCheck.line}, coluna ${syntaxCheck.column}. ${syntaxCheck.message}`
+    );
+  }
+}
+
+function checkJavaScriptSyntax(source) {
+  try {
+    // Parse sem executar
+    new Function(source);
+    return { ok: true };
+  } catch (err) {
+    const msg = err?.message || 'Erro de sintaxe desconhecido.';
+    const match = msg.match(/<anonymous>:(\d+):(\d+)/);
+    return {
+      ok: false,
+      line: match ? Number(match[1]) : '?',
+      column: match ? Number(match[2]) : '?',
+      message: msg
+    };
+  }
 }
 
 // ── RENDER HELPERS ─────────────────────────────────
