@@ -877,9 +877,42 @@ Diff:`;
 }
 
 function applyPatch(original, patchText) {
-  const result = Diff.applyPatch(original, patchText);
-  if (result === false) throw new Error('O patch não pôde ser aplicado ao arquivo atual.');
-  return result;
+  const patches = splitUnifiedDiffs(patchText);
+  if (!patches.length) throw new Error('Nenhum patch unificado válido foi encontrado.');
+
+  let current = original;
+  for (const patch of patches) {
+    const result = Diff.applyPatch(current, patch);
+    if (result === false) {
+      throw new Error('Um dos patches não pôde ser aplicado ao arquivo atual.');
+    }
+    current = result;
+  }
+
+  return current;
+}
+
+function splitUnifiedDiffs(patchText) {
+  const lines = patchText.replace(/\r\n/g, '\n').split('\n');
+  const patches = [];
+  let start = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('--- ')) {
+      if (start !== -1) {
+        const chunk = lines.slice(start, i).join('\n').trim();
+        if (chunk) patches.push(chunk);
+      }
+      start = i;
+    }
+  }
+
+  if (start !== -1) {
+    const chunk = lines.slice(start).join('\n').trim();
+    if (chunk) patches.push(chunk);
+  }
+
+  return patches;
 }
 
 // ── RENDER HELPERS ─────────────────────────────────
