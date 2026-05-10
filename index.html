@@ -671,6 +671,13 @@ let originalContent  = '';
 let originalFileName = '';
 let modifiedContent  = '';
 let typingRow        = null;
+let activeRequestId  = 0;
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const PATCH_ENGINE_CONFIG = Object.freeze({
+  maxAttempts: 8,
+  requestTimeoutMs: 45000,
+  retryBaseDelayMs: 450
+});
 
 // ── ELEMENTS ───────────────────────────────────────
 const chatMessages  = document.getElementById('chatMessages');
@@ -702,6 +709,15 @@ function checkConfig() {
     userInput.placeholder  = 'Descreva a modificação...';
     fileBtn.disabled       = false;
   }
+}
+
+function setStatus(text, statusClass = '') {
+  chatStatus.textContent = text;
+  chatStatus.className = `chat-status${statusClass ? ` ${statusClass}` : ''}`;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ── SETTINGS ───────────────────────────────────────
@@ -774,6 +790,11 @@ fileInput.addEventListener('change', handleFile);
 function handleFile(e) {
   const file = e.target.files[0];
   if (!file) return;
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    addBotMsg(`⚠ Arquivo muito grande (${(file.size / 1024 / 1024).toFixed(2)} MB). Limite: ${(MAX_FILE_SIZE_BYTES / 1024 / 1024).toFixed(0)} MB.`);
+    fileInput.value = '';
+    return;
+  }
 
   originalFileName = file.name;
   const reader = new FileReader();
@@ -788,8 +809,7 @@ function handleFile(e) {
     fileBtn.classList.add('hidden');
     userInput.disabled = false;
     userInput.focus();
-    chatStatus.textContent = '● online';
-    chatStatus.className   = 'chat-status status-online';
+    setStatus('● online', 'status-online');
     scroll();
   };
   reader.readAsText(file);
@@ -809,6 +829,7 @@ userInput.addEventListener('keydown', (e) => {
 });
 
 async function sendRequest() {
+  const requestId = ++activeRequestId;
   const instruction = userInput.value.trim();
   if (!instruction || !originalContent || !API_KEY || !MODEL) return;
 
@@ -816,30 +837,30 @@ async function sendRequest() {
   userInput.value  = '';
   sendBtn.disabled = true;
 
-  chatStatus.textContent = '● digitando...';
-  chatStatus.className   = 'chat-status status-typing';
+  setStatus('● digitando...', 'status-typing');
 
   showTyping();
 
   try {
     const { content: newContent, attempts } = await applyPatchWithRetry(instruction, modifiedContent, originalFileName);
+    if (requestId !== activeRequestId) return;
     removeTyping();
     modifiedContent  = newContent;
 
     addBotMsg(`Patch aplicado com sucesso (${attempts} tentativa${attempts > 1 ? 's' : ''}). Arquivo modificado pronto:`);
     addFileMsg(newContent, `modificado_${originalFileName}`);
   } catch (err) {
+    if (requestId !== activeRequestId) return;
     removeTyping();
     addBotMsg(`⚠ Erro: ${err.message}`);
   }
 
-  chatStatus.textContent = '● online';
-  chatStatus.className   = 'chat-status status-online';
+  setStatus('● online', 'status-online');
   sendBtn.disabled       = !userInput.value.trim();
 }
 
 async function applyPatchWithRetry(instruction, baseContent, filename) {
-  const maxAttempts = 6;
+  const { maxAttempts, retryBaseDelayMs } = PATCH_ENGINE_CONFIG;
   let lastError = '';
   let lastPatch = '';
 
@@ -862,6 +883,10 @@ async function applyPatchWithRetry(instruction, baseContent, filename) {
     } catch (err) {
       lastError = err.message || String(err);
       lastPatch = patch;
+      if (attempt < maxAttempts) {
+        const jitter = Math.floor(Math.random() * 200);
+        await wait((retryBaseDelayMs * attempt) + jitter);
+      }
     }
   }
 
@@ -885,6 +910,10 @@ Generate a corrected patch that fixes the previous error.`
     : '';
 
   const prompt = `Generate ONLY a unified diff patch for this instruction. No explanation, no markdown, just the raw diff starting with --- and +++.
+Rules:
+- Keep context lines minimal and accurate.
+- Never include commentary outside unified diff.
+- If previous patch failed, strictly fix based on previous error.
 
 Instruction: ${instruction}
 
@@ -897,14 +926,27 @@ ${retryBlock}
 Diff:`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
-  const res  = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
-    })
-  });
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), PATCH_ENGINE_CONFIG.requestTimeoutMs);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+      })
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Timeout ao gerar patch. Tente novamente.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
@@ -915,7 +957,7 @@ Diff:`;
   let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
   // Strip markdown fences if present
   raw = raw.replace(/^```[\w]*\n?/m, '').replace(/```\s*$/m, '').trim();
-  return raw;
+  return normalizePatchText(raw);
 }
 
 function applyPatch(original, patchText) {
@@ -935,7 +977,8 @@ function applyPatch(original, patchText) {
 }
 
 function splitUnifiedDiffs(patchText) {
-  const lines = patchText.replace(/\r\n/g, '\n').split('\n');
+  const normalized = normalizePatchText(patchText);
+  const lines = normalized.split('\n');
   const patches = [];
   let start = -1;
 
@@ -955,6 +998,13 @@ function splitUnifiedDiffs(patchText) {
   }
 
   return patches;
+}
+
+function normalizePatchText(text) {
+  return (text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^\uFEFF/, '')
+    .trim();
 }
 
 function validatePatchedCode(content, filename) {
@@ -977,7 +1027,7 @@ function validatePatchedCode(content, filename) {
 
 function checkJavaScriptSyntax(source) {
   try {
-    // Parse sem executar
+    // Parse sem executar (modo script)
     new Function(source);
     return { ok: true };
   } catch (err) {
