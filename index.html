@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Editor Inteligente com IA · Sem Limites</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(145deg, #f6f9fc 0%, #eef2f5 100%);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            padding: 2rem 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .editor-container {
+            max-width: 1400px;
+            width: 100%;
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(2px);
+            border-radius: 2.5rem;
+            box-shadow: 0 25px 45px -12px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.05);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        .toolbar {
+            background: #ffffffdd;
+            backdrop-filter: blur(8px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(0,0,0,0.08);
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .title-section h1 {
+            font-size: 1.45rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #1e2b3c, #2c5a73);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin: 0;
+            letter-spacing: -0.2px;
+        }
+
+        .title-section p {
+            font-size: 0.75rem;
+            color: #4a6272;
+            margin: 0.2rem 0 0;
+        }
+
+        .status-badge {
+            background: #e9ecef;
+            padding: 0.3rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #2c3e4e;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .status-badge .dot {
+            width: 10px;
+            height: 10px;
+            background: #2b9348;
+            border-radius: 10px;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.4; transform: scale(0.9);}
+            100% { opacity: 1; transform: scale(1.2);}
+        }
+
+        .dual-panel {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .panel {
+            flex: 1;
+            min-width: 280px;
+            padding: 1.8rem 1.5rem;
+            background: #ffffff;
+            transition: all 0.2s;
+        }
+
+        .editor-panel {
+            border-right: 1px solid #e4e9ef;
+        }
+
+        .panel h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0 0 1rem 0;
+            color: #1f3b4c;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 65vh;
+            min-height: 400px;
+            padding: 1rem;
+            font-family: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            background: #fefef7;
+            border: 1px solid #cfdfe8;
+            border-radius: 1.2rem;
+            resize: vertical;
+            outline: none;
+            transition: 0.2s;
+            color: #1a2c38;
+        }
+
+        textarea:focus {
+            border-color: #5f9db2;
+            box-shadow: 0 0 0 3px rgba(79, 146, 173, 0.2);
+        }
+
+        .ai-section {
+            background: #f8fafd;
+            padding: 1.2rem 1.8rem 1.8rem;
+            border-top: 1px solid #e2edf2;
+        }
+
+        .prompt-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .prompt-input {
+            flex: 3;
+            min-width: 200px;
+        }
+
+        .prompt-input label {
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #2c5a6e;
+            display: block;
+            margin-bottom: 0.4rem;
+        }
+
+        .prompt-input input, .prompt-input textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 60px;
+            border: 1px solid #cbdde6;
+            background: white;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .prompt-input textarea {
+            border-radius: 1.2rem;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .action-buttons {
+            flex: 1;
+            display: flex;
+            gap: 0.7rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #2c6e8f;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 40px;
+            font-weight: 500;
+            color: white;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        button i {
+            font-style: normal;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        button.secondary {
+            background: #4f7e97;
+        }
+
+        button.warning {
+            background: #c44536;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.03);
+            box-shadow: 0 8px 18px -8px rgba(0,0,0,0.2);
+        }
+
+        .diff-message {
+            background: #eef3f7;
+            margin-top: 1rem;
+            padding: 0.8rem 1rem;
+            border-radius: 1rem;
+            font-size: 0.8rem;
+            font-family: monospace;
+            color: #1c4e66;
+            border-left: 4px solid #2c6e8f;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        footer {
+            font-size: 0.7rem;
+            padding: 0.8rem 2rem;
+            background: #f0f4f8;
+            text-align: center;
+            color: #5f7f8c;
+            border-top: 1px solid #e2edf2;
+        }
+        
+        @media (max-width: 780px) {
+            .editor-container { border-radius: 1.5rem; }
+            .panel { padding: 1rem; }
+            .toolbar { flex-direction: column; align-items: start; }
+        }
+    </style>
+</head>
+<body>
+<div class="editor-container">
+    <div class="toolbar">
+        <div class="title-section">
+            <h1>✍️ Editor IA · Sem Limites · Diff & Patch</h1>
+            <p>Modificação cirúrgica via inteligência artificial · Sem restrições de tamanho</p>
+        </div>
+        <div class="status-badge" id="apiStatus">
+            <span class="dot"></span> <span>IA pronta · Gemini Flash</span>
+        </div>
+    </div>
+
+    <div class="dual-panel">
+        <div class="panel editor-panel">
+            <h3>📄 Documento atual</h3>
+            <textarea id="documentText" placeholder="Cole ou escreva seu conteúdo aqui... Sem limites de tamanho!">O rato roeu a roupa do rei de Roma. A rainha, irritada, pediu conselhos ao sábio do reino. A tecnologia com IA pode ajudar a reescrever histórias de maneira criativa e precisa.</textarea>
+        </div>
+        <div class="panel">
+            <h3>🔍 Prévia & Histórico diff</h3>
+            <div style="background:#fef9ef; border-radius:1rem; padding:0.8rem; border:1px solid #f1e5cf; min-height: 120px; max-height: 280px; overflow: auto; font-size:0.85rem; font-family: monospace;" id="diffPreview">
+                ⚡ As alterações por IA serão mostradas aqui (antes/depois)
+            </div>
+            <div style="margin-top: 1rem;">
+                <button id="resetDocBtn" class="warning" style="background:#7f5c4b;">⟳ Restaurar original</button>
+                <button id="clearDocBtn" class="secondary" style="margin-left:0.5rem;">🗑️ Limpar editor</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ai-section">
+        <div class="prompt-group">
+            <div class="prompt-input">
+                <label>🧠 O que você quer adicionar, modificar ou corrigir?</label>
+                <textarea id="userPrompt" rows="2" placeholder="Exemplo: 'Adicione uma frase sobre a inteligência artificial salvar o reino' ou 'Troque a palavra rato por camundongo e deixe o texto mais humorístico'"></textarea>
+            </div>
+            <div class="action-buttons">
+                <button id="applyIaBtn">✨ Aplicar com IA (diff+patch)</button>
+                <button id="manualPatchBtn" class="secondary">🔄 Apenas diff visual</button>
+            </div>
+        </div>
+        <div id="operationLog" class="diff-message">
+            ✅ Pronto. Sem limites de tamanho! Peça modificações inteligentes. O sistema calculará diferenças e aplicará patch.
+        </div>
+    </div>
+    <footer>
+        ⚡ Sistema Diff-Patch sem limites: IA adaptativa para qualquer tamanho de documento.
+        Conexão Google Gemini | API Key configurada | Sem restrições de caracteres
+    </footer>
+</div>
+
+<script>
+    // ================================
+    // 1. Elementos DOM
+    // ================================
+    const textarea = document.getElementById('documentText');
+    const userPromptInput = document.getElementById('userPrompt');
+    const applyBtn = document.getElementById('applyIaBtn');
+    const manualPatchBtn = document.getElementById('manualPatchBtn');
+    const resetBtn = document.getElementById('resetDocBtn');
+    const clearDocBtn = document.getElementById('clearDocBtn');
+    const diffPreviewDiv = document.getElementById('diffPreview');
+    const operationLog = document.getElementById('operationLog');
+
+    const ORIGINAL_FALLBACK = "O rato roeu a roupa do rei de Roma. A rainha, irritada, pediu conselhos ao sábio do reino. A tecnologia com IA pode ajudar a reescrever histórias de maneira criativa e precisa.";
+
+    // ================================
+    // 2. Funções de Diff/Patch otimizadas (sem limites)
+    // ================================
+
+    function tokenizePreserveSpaces(text) {
+        return text.split(/(\s+)/).filter(t => t !== "");
+    }
+
+    function computeDiff(oldTokens, newTokens) {
+        const m = oldTokens.length;
+        const n = newTokens.length;
+        
+        if (m === 0) {
+            return newTokens.map(token => ({ type: 'insert', value: token }));
+        }
+        if (n === 0) {
+            return oldTokens.map(token => ({ type: 'delete', value: token }));
+        }
+        
+        const dp = Array(m + 1).fill().map(() => Array(n + 1).fill(0));
+        
+        for (let i = 1; i <= m; i++) {
+            for (let j = 1; j <= n; j++) {
+                if (oldTokens[i - 1] === newTokens[j - 1]) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
+        
+        let i = m, j = n;
+        const ops = [];
+        
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0 && oldTokens[i - 1] === newTokens[j - 1]) {
+                ops.unshift({ type: 'equal', value: oldTokens[i - 1] });
+                i--; j--;
+            } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                ops.unshift({ type: 'insert', value: newTokens[j - 1] });
+                j--;
+            } else if (i > 0 && (j === 0 || dp[i - 1][j] > dp[i][j - 1])) {
+                ops.unshift({ type: 'delete', value: oldTokens[i - 1] });
+                i--;
+            } else {
+                if (i > 0) ops.unshift({ type: 'delete', value: oldTokens[--i] });
+                else if (j > 0) ops.unshift({ type: 'insert', value: newTokens[--j] });
+            }
+        }
+        return ops;
+    }
+
+    function applyPatchFromDiff(oldText, diffOps) {
+        let resultTokens = [];
+        for (let op of diffOps) {
+            if (op.type === 'equal' || op.type === 'insert') {
+                resultTokens.push(op.value);
+            }
+        }
+        return resultTokens.join('');
+    }
+
+    function getReadableDiff(oldText, newText) {
+        if (oldText === newText) return "<span style='color:#408070'>✨ Nenhuma diferença detectada.</span>";
+        
+        const oldTok = tokenizePreserveSpaces(oldText);
+        const newTok = tokenizePreserveSpaces(newText);
+        const ops = computeDiff(oldTok, newTok);
+        
+        let html = '<div style="font-family: monospace; font-size:0.8rem; line-height:1.4;">';
+        let addedCount = 0, removedCount = 0;
+        
+        for (let op of ops) {
+            if (op.type === 'insert') {
+                html += `<span style="background:#d4edda; color:#155724; padding:2px 1px; border-radius:6px;" title="adicionado">${escapeHtml(op.value)}</span>`;
+                addedCount++;
+            } else if (op.type === 'delete') {
+                html += `<span style="background:#f8d7da; color:#721c24; text-decoration:line-through; padding:2px 1px; border-radius:6px;" title="removido">${escapeHtml(op.value)}</span>`;
+                removedCount++;
+            } else {
+                html += `<span style="color:#2c5a6e;">${escapeHtml(op.value)}</span>`;
+            }
+        }
+        
+        html += '</div>';
+        if (addedCount === 0 && removedCount === 0) html = "<span>ℹ️ Conteúdo idêntico após transformação.</span>";
+        else html += `<div style="font-size:0.7rem; margin-top:8px; color:#4a6272;">📊 +${addedCount} adições | -${removedCount} remoções</div>`;
+        
+        return html;
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    // ================================
+    // 3. Integração com Google Gemini (sem limites de tamanho no prompt)
+    // ================================
+    const GEMINI_API_KEY = 'AIzaSyCGKyWYTyHq8o-ppC78PCbs_GLYHKlaAVM';
+    const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+
+    async function callGemini(promptUser, currentDocument) {
+        const systemInstruction = `Você é um assistente de edição de texto especializado em aplicar solicitações do usuário de forma exata.
+Regras importantes:
+- O usuário vai pedir modificações, adições ou correções sobre o documento atual.
+- Você DEVE retornar SOMENTE o texto completo modificado conforme o pedido, sem explicações, sem comentários, sem marcações.
+- Preserve o máximo possível o estilo e formatação (exceto o que for solicitado).
+- Responda APENAS com o novo texto resultante, sem frases extras, sem aspas ao redor do documento.
+- Mantenha a mesma língua do documento original.
+- Se o pedido for ambíguo, faça a alteração mais plausível, mas nunca comente.
+- IMPORTANTE: Edição precisa. Use apenas o conteúdo final.
+- NÃO HÁ LIMITES DE TAMANHO - processe todo o documento completamente.`;
+
+        const fullPrompt = `### DOCUMENTO ATUAL ###\n${currentDocument}\n\n### SOLICITAÇÃO DO USUÁRIO ###\n${promptUser}\n\n### INSTRUÇÃO ###\nGere o DOCUMENTO COMPLETO e modificado conforme o pedido. sem texto adicional.`;
+
+        try {
+            const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: fullPrompt
+                        }]
+                    }],
+                    systemInstruction: {
+                        parts: [{ text: systemInstruction }]
+                    },
+                    generationConfig: {
+                        temperature: 0.2,
+                        maxOutputTokens: 8192,
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Erro HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+            }
+            const data = await response.json();
+            const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!generatedText) throw new Error("Resposta vazia da IA.");
+            return generatedText.trim();
+        } catch (err) {
+            console.error(err);
+            throw new Error(`Falha IA: ${err.message}`);
+        }
+    }
+
+    async function executeAIEdit(applyPatchDirectly = true) {
+        const currentDoc = textarea.value;
+        const userReq = userPromptInput.value.trim();
+        
+        if (!userReq) {
+            operationLog.innerHTML = "⚠️ Por favor, descreva o que deseja adicionar ou modificar no campo de texto.";
+            return;
+        }
+
+        operationLog.innerHTML = "⏳ Consultando IA Gemini... processando documento completo (sem limites).";
+        applyBtn.disabled = true;
+        manualPatchBtn.disabled = true;
+
+        try {
+            const newDocumentSuggestion = await callGemini(userReq, currentDoc);
+            
+            if (newDocumentSuggestion.length === 0) throw new Error("IA retornou texto vazio.");
+
+            const diffHtml = getReadableDiff(currentDoc, newDocumentSuggestion);
+            diffPreviewDiv.innerHTML = diffHtml;
+
+            if (applyPatchDirectly) {
+                if (currentDoc === newDocumentSuggestion) {
+                    operationLog.innerHTML = "ℹ️ A IA não sugeriu alterações. Nenhuma modificação aplicada.";
+                } else {
+                    textarea.value = newDocumentSuggestion;
+                    const tamanhoAntigo = currentDoc.length;
+                    const tamanhoNovo = newDocumentSuggestion.length;
+                    operationLog.innerHTML = `✅ Patch aplicado com sucesso! Documento modificado. (${tamanhoAntigo} → ${tamanhoNovo} caracteres)`;
+                    const newDiff = getReadableDiff(currentDoc, newDocumentSuggestion);
+                    diffPreviewDiv.innerHTML = newDiff;
+                }
+            } else {
+                operationLog.innerHTML = `🔍 Diff gerado (não aplicado). Para aplicar, clique em "Aplicar com IA". Alterações destacadas em verde/vermelho.`;
+            }
+        } catch (error) {
+            operationLog.innerHTML = `❌ Erro na IA: ${error.message}. Verifique conexão ou tente novamente.`;
+            diffPreviewDiv.innerHTML = `<span style="color:#b00020;">Falha na comunicação: ${escapeHtml(error.message)}</span>`;
+        } finally {
+            applyBtn.disabled = false;
+            manualPatchBtn.disabled = false;
+        }
+    }
+
+    async function showDiffOnly() {
+        await executeAIEdit(false);
+    }
+
+    async function applyAIEditAndPatch() {
+        await executeAIEdit(true);
+    }
+
+    function resetDocument() {
+        textarea.value = ORIGINAL_FALLBACK;
+        diffPreviewDiv.innerHTML = "↻ Documento restaurado para o original.";
+        operationLog.innerHTML = "Documento restaurado para o texto padrão.";
+        userPromptInput.value = "";
+    }
+
+    function clearEditor() {
+        textarea.value = "";
+        diffPreviewDiv.innerHTML = "📄 Editor limpo. Escreva ou peça IA para gerar conteúdo.";
+        operationLog.innerHTML = "Documento limpo. Sem limites de tamanho para criar.";
+    }
+
+    function init() {
+        applyBtn.addEventListener('click', applyAIEditAndPatch);
+        manualPatchBtn.addEventListener('click', showDiffOnly);
+        resetBtn.addEventListener('click', resetDocument);
+        clearDocBtn.addEventListener('click', clearEditor);
+        
+        diffPreviewDiv.innerHTML = "🔹 Sem limites! Use comandos acima para modificar qualquer documento com IA + diff patch.";
+        operationLog.innerHTML = "✅ Pronto! Sistema sem limites de tamanho. Exemplo: 'adicione um parágrafo filosófico' e clique em Aplicar com IA.";
+    }
+
+    init();
+</script>
+</body>
+</html>
