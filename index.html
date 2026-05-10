@@ -527,6 +527,7 @@ Regras importantes:
 - Mantenha a mesma língua do documento original.
 - Se o pedido for ambíguo, faça a alteração mais plausível, mas nunca comente.
 - IMPORTANTE: Edição precisa. Use apenas o conteúdo final.
+- O diff-patch fará cirurgia super precisa mantendo o resto do conteúdo do arquivo intacto, removendo apenas o que for necessário para implementar o que o usuário pediu.
 - NÃO HÁ LIMITES DE TAMANHO - processe todo o documento completamente.`;
 
         const fullPrompt = `### DOCUMENTO ATUAL ###\n${currentDocument}\n\n### SOLICITAÇÃO DO USUÁRIO ###\n${promptUser}\n\n### INSTRUÇÃO ###\nGere o DOCUMENTO COMPLETO e modificado conforme o pedido. sem texto adicional.`;
