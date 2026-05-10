@@ -678,6 +678,8 @@ const PATCH_ENGINE_CONFIG = Object.freeze({
   requestTimeoutMs: 45000,
   retryBaseDelayMs: 450
 });
+const PATCH_LOG_LIMIT = 40;
+const patchTelemetry = [];
 
 // ── ELEMENTS ───────────────────────────────────────
 const chatMessages  = document.getElementById('chatMessages');
@@ -718,6 +720,78 @@ function setStatus(text, statusClass = '') {
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pushTelemetry(event, payload = {}) {
+  patchTelemetry.push({
+    event,
+    at: new Date().toISOString(),
+    ...payload
+  });
+  if (patchTelemetry.length > PATCH_LOG_LIMIT) patchTelemetry.shift();
+}
+
+function summarizeInstruction(instruction) {
+  return (instruction || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+
+function detectFileLanguage(filename = '') {
+  const ext = filename.toLowerCase().split('.').pop() || '';
+  const map = {
+    js: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    jsx: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    py: 'python',
+    java: 'java',
+    rb: 'ruby',
+    go: 'go',
+    rs: 'rust',
+    php: 'php',
+    html: 'html',
+    css: 'css',
+    json: 'json',
+    md: 'markdown'
+  };
+  return map[ext] || 'text';
+}
+
+function buildPrompt({ instruction, content, retryCtx, filename }) {
+  const language = detectFileLanguage(filename);
+  const retryBlock = retryCtx
+    ? `
+
+Retry context:
+- Attempt: ${retryCtx.attempt}/${retryCtx.maxAttempts}
+- Previous error: ${retryCtx.lastError || 'none'}
+- Previous patch (may be invalid):
+\`\`\`
+${retryCtx.lastPatch || '(empty)'}
+\`\`\`
+
+Generate a corrected patch that fixes the previous error.`
+    : '';
+
+  return `Generate ONLY a unified diff patch for this instruction. No explanation, no markdown, just the raw diff starting with --- and +++.
+Rules:
+- Keep context lines minimal and accurate.
+- Never include commentary outside unified diff.
+- If previous patch failed, strictly fix based on previous error.
+- Target language: ${language}
+- Keep filename coherence in --- and +++ headers.
+
+Instruction: ${instruction}
+
+File name: ${filename || 'unknown'}
+File:
+\`\`\`
+${content}
+\`\`\`
+${retryBlock}
+
+Diff:`;
 }
 
 // ── SETTINGS ───────────────────────────────────────
@@ -834,6 +908,11 @@ async function sendRequest() {
   if (!instruction || !originalContent || !API_KEY || !MODEL) return;
 
   addUserMsg(instruction);
+  pushTelemetry('instruction_received', {
+    requestId,
+    file: originalFileName,
+    instruction: summarizeInstruction(instruction)
+  });
   userInput.value  = '';
   sendBtn.disabled = true;
 
@@ -865,24 +944,28 @@ async function applyPatchWithRetry(instruction, baseContent, filename) {
   let lastPatch = '';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    pushTelemetry('attempt_started', { attempt, maxAttempts, file: filename });
     const patch = await generatePatch(instruction, baseContent, {
       lastError,
       lastPatch,
       attempt,
       maxAttempts
-    });
+    }, filename);
     if (!patch) {
       lastError = 'Modelo não retornou patch válido.';
+      pushTelemetry('attempt_empty_patch', { attempt });
       continue;
     }
 
     try {
       const newContent = applyPatch(baseContent, patch);
       validatePatchedCode(newContent, filename);
+      pushTelemetry('attempt_success', { attempt, patchLength: patch.length });
       return { content: newContent, attempts: attempt };
     } catch (err) {
       lastError = err.message || String(err);
       lastPatch = patch;
+      pushTelemetry('attempt_failed', { attempt, error: lastError, patchLength: patch.length });
       if (attempt < maxAttempts) {
         const jitter = Math.floor(Math.random() * 200);
         await wait((retryBaseDelayMs * attempt) + jitter);
@@ -894,36 +977,8 @@ async function applyPatchWithRetry(instruction, baseContent, filename) {
 }
 
 // ── API ────────────────────────────────────────────
-async function generatePatch(instruction, content, retryCtx = null) {
-  const retryBlock = retryCtx
-    ? `
-
-Retry context:
-- Attempt: ${retryCtx.attempt}/${retryCtx.maxAttempts}
-- Previous error: ${retryCtx.lastError || 'none'}
-- Previous patch (may be invalid):
-\`\`\`
-${retryCtx.lastPatch || '(empty)'}
-\`\`\`
-
-Generate a corrected patch that fixes the previous error.`
-    : '';
-
-  const prompt = `Generate ONLY a unified diff patch for this instruction. No explanation, no markdown, just the raw diff starting with --- and +++.
-Rules:
-- Keep context lines minimal and accurate.
-- Never include commentary outside unified diff.
-- If previous patch failed, strictly fix based on previous error.
-
-Instruction: ${instruction}
-
-File:
-\`\`\`
-${content}
-\`\`\`
-${retryBlock}
-
-Diff:`;
+async function generatePatch(instruction, content, retryCtx = null, filename = '') {
+  const prompt = buildPrompt({ instruction, content, retryCtx, filename });
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
   const ctrl = new AbortController();
@@ -957,6 +1012,10 @@ Diff:`;
   let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
   // Strip markdown fences if present
   raw = raw.replace(/^```[\w]*\n?/m, '').replace(/```\s*$/m, '').trim();
+  pushTelemetry('patch_generated', {
+    attempt: retryCtx?.attempt || 1,
+    chars: raw.length
+  });
   return normalizePatchText(raw);
 }
 
@@ -998,6 +1057,13 @@ function splitUnifiedDiffs(patchText) {
   }
 
   return patches;
+}
+
+function extractPatchHeaders(patch) {
+  const lines = (patch || '').split('\n');
+  const from = lines.find((line) => line.startsWith('--- ')) || '';
+  const to = lines.find((line) => line.startsWith('+++ ')) || '';
+  return { from, to };
 }
 
 function normalizePatchText(text) {
