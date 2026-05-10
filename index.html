@@ -1,15 +1,301 @@
-curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
-  -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: AIzaSyCGKyWYTyHq8o-ppC78PCbs_GLYHKlaAVM' \
-  -X POST \
-  -d '{
-    "contents": [
-      {
-        "parts": [
-          {
-            "text": "Explain how AI works in a few words"
-          }
-        ]
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor Diff/Patch Poderoso</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #171a2b;
+      --panel-2: #1f2440;
+      --text: #e8ebff;
+      --muted: #9aa3d2;
+      --ok: #2ecc71;
+      --warn: #f39c12;
+      --bad: #ff6b6b;
+      --accent: #7aa2ff;
+      --border: #2d3256;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(circle at top, #151935, #0c0f1a 60%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--panel) 88%, black 12%);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 14px;
+      min-height: 0;
+    }
+
+    .pane {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+    }
+
+    .pane-head {
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100%;
+      min-height: 300px;
+      resize: none;
+      border: 0;
+      outline: none;
+      color: var(--text);
+      background: transparent;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      line-height: 1.5;
+      font-size: 0.88rem;
+      padding: 12px;
+      tab-size: 2;
+    }
+
+    .controls {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      background: color-mix(in srgb, var(--panel) 85%, black 15%);
+    }
+
+    button {
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: #20274a;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover { filter: brightness(1.1); }
+    button:active { transform: translateY(1px); }
+
+    .accent { background: #2b3f94; border-color: #3f5fd6; }
+    .ok { background: #1f6b45; border-color: #2ecc71; }
+
+    #patchInput {
+      width: 100%;
+      min-height: 180px;
+      border: 1px solid var(--border);
+      background: #0f1330;
+      color: #dce3ff;
+      border-radius: 10px;
+      padding: 10px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    #status {
+      margin-left: auto;
+      font-size: 0.87rem;
+      color: var(--muted);
+      max-width: 100%;
+    }
+
+    .status-ok { color: var(--ok); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--bad); }
+
+    details {
+      margin: 0 14px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #121730;
+      overflow: hidden;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 600;
+      background: #171d3c;
+    }
+
+    .patch-box { padding: 10px 12px 12px; }
+
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Editor com Diff/Patch (sem reescrever o arquivo inteiro)</h1>
+    <div class="sub">Cole seu código base à esquerda. Faça mudanças à direita e gere um patch leve. Ou aplique um patch diretamente.</div>
+  </header>
+
+  <main class="layout">
+    <section class="pane">
+      <div class="pane-head"><strong>Base (original)</strong><span id="baseInfo"></span></div>
+      <textarea id="baseCode" spellcheck="false"></textarea>
+    </section>
+
+    <section class="pane">
+      <div class="pane-head"><strong>Alvo (editado)</strong><span id="targetInfo"></span></div>
+      <textarea id="targetCode" spellcheck="false"></textarea>
+    </section>
+  </main>
+
+  <div class="controls">
+    <button id="btnGenerate" class="accent">Gerar patch da Base → Alvo</button>
+    <button id="btnApply" class="ok">Aplicar patch na Base</button>
+    <button id="btnSwap">Base ← Alvo</button>
+    <button id="btnClear">Limpar</button>
+    <span id="status">Pronto.</span>
+  </div>
+
+  <details open>
+    <summary>Patch (formato diff_match_patch)</summary>
+    <div class="patch-box">
+      <textarea id="patchInput" spellcheck="false" placeholder="O patch gerado aparece aqui. Você também pode colar um patch manualmente para aplicar na Base."></textarea>
+    </div>
+  </details>
+
+  <script src="https://unpkg.com/diff-match-patch@1.0.5/index.js"></script>
+  <script>
+    const dmp = new diff_match_patch();
+    dmp.Diff_Timeout = 1;
+    dmp.Match_Threshold = 0.45;
+    dmp.Match_Distance = 1000;
+
+    const baseCode = document.getElementById('baseCode');
+    const targetCode = document.getElementById('targetCode');
+    const patchInput = document.getElementById('patchInput');
+    const statusEl = document.getElementById('status');
+    const baseInfo = document.getElementById('baseInfo');
+    const targetInfo = document.getElementById('targetInfo');
+
+    function setStatus(msg, kind = '') {
+      statusEl.className = '';
+      if (kind) statusEl.classList.add(`status-${kind}`);
+      statusEl.textContent = msg;
+    }
+
+    function countLines(txt) {
+      return txt.length ? txt.split('\n').length : 0;
+    }
+
+    function refreshMeta() {
+      baseInfo.textContent = `${baseCode.value.length} chars • ${countLines(baseCode.value)} linhas`;
+      targetInfo.textContent = `${targetCode.value.length} chars • ${countLines(targetCode.value)} linhas`;
+    }
+
+    function generatePatch() {
+      const before = baseCode.value;
+      const after = targetCode.value;
+      const diffs = dmp.diff_main(before, after);
+      dmp.diff_cleanupSemantic(diffs);
+      const patches = dmp.patch_make(before, diffs);
+      const text = dmp.patch_toText(patches);
+      patchInput.value = text;
+
+      const changed = diffs.filter(([op]) => op !== 0).length;
+      if (!changed) {
+        setStatus('Sem alterações detectadas: base e alvo são iguais.', 'warn');
+      } else {
+        setStatus(`Patch gerado com ${patches.length} bloco(s) e ${changed} trecho(s) alterado(s).`, 'ok');
       }
-    ]
-  }'
+    }
+
+    function applyPatch() {
+      try {
+        const before = baseCode.value;
+        const patchText = patchInput.value.trim();
+        if (!patchText) {
+          setStatus('Nenhum patch para aplicar.', 'warn');
+          return;
+        }
+
+        const patches = dmp.patch_fromText(patchText);
+        const [result, applied] = dmp.patch_apply(patches, before);
+        targetCode.value = result;
+
+        const okCount = applied.filter(Boolean).length;
+        const failCount = applied.length - okCount;
+
+        if (failCount === 0) {
+          setStatus(`Patch aplicado com sucesso (${okCount}/${applied.length}).`, 'ok');
+        } else {
+          setStatus(`Patch aplicado parcialmente (${okCount}/${applied.length}). ${failCount} bloco(s) falharam.`, 'warn');
+        }
+      } catch (err) {
+        setStatus(`Erro no patch: ${err.message}`, 'bad');
+      }
+      refreshMeta();
+    }
+
+    document.getElementById('btnGenerate').addEventListener('click', () => {
+      generatePatch();
+      refreshMeta();
+    });
+
+    document.getElementById('btnApply').addEventListener('click', applyPatch);
+
+    document.getElementById('btnSwap').addEventListener('click', () => {
+      baseCode.value = targetCode.value;
+      setStatus('Base atualizada com o conteúdo do Alvo.', 'ok');
+      refreshMeta();
+    });
+
+    document.getElementById('btnClear').addEventListener('click', () => {
+      baseCode.value = '';
+      targetCode.value = '';
+      patchInput.value = '';
+      setStatus('Tudo limpo.', 'warn');
+      refreshMeta();
+    });
+
+    [baseCode, targetCode].forEach(el => el.addEventListener('input', refreshMeta));
+
+    baseCode.value = `function soma(a, b) {\n  return a + b;\n}\n`;
+    targetCode.value = `function soma(a, b) {\n  // Suporta números e strings numéricas\n  return Number(a) + Number(b);\n}\n`;
+    generatePatch();
+    refreshMeta();
+  </script>
+</body>
+</html>
