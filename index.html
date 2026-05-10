@@ -829,7 +829,8 @@ async function sendRequest() {
     const newContent = applyPatch(modifiedContent, patch);
     modifiedContent  = newContent;
 
-    addBotMsg('Patch aplicado com sucesso. Arquivo modificado pronto:');
+    const stats = getPatchStats(patch);
+    addBotMsg(`Patch aplicado com sucesso (${stats.files} arquivo(s), +${stats.added} / -${stats.removed} linhas). Arquivo modificado pronto:`);
     addFileMsg(newContent, `modificado_${originalFileName}`);
   } catch (err) {
     removeTyping();
@@ -843,16 +844,7 @@ async function sendRequest() {
 
 // ── API ────────────────────────────────────────────
 async function generatePatch(instruction, content) {
-  const prompt = `Generate ONLY a unified diff patch for this instruction. No explanation, no markdown, just the raw diff starting with --- and +++.
-
-Instruction: ${instruction}
-
-File:
-\`\`\`
-${content}
-\`\`\`
-
-Diff:`;
+  const prompt = `You are a code-editing engine. Return ONLY a valid unified diff patch that can be applied directly.\n\nHard rules:\n1) Output only raw patch text (no markdown fences, no explanation).\n2) Use unified diff format with --- and +++ headers and @@ hunks.\n3) Keep indentation and encoding exactly consistent with input file.\n4) Edit only what instruction requests; preserve all other content verbatim.\n5) If no changes are needed, return an empty string.\n\nInstruction: ${instruction}\n\nCurrent file content:\n${content}\n\nUnified diff:`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
   const res  = await fetch(url, {
@@ -871,14 +863,47 @@ Diff:`;
 
   const data = await res.json();
   let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-  // Strip markdown fences if present
-  raw = raw.replace(/^```[\w]*\n?/m, '').replace(/```\s*$/m, '').trim();
+  raw = sanitizePatch(raw);
+
+  if (!raw) return '';
+  if (!isUnifiedDiff(raw)) {
+    throw new Error('Resposta do modelo não está em formato unified diff válido.');
+  }
+
   return raw;
 }
 
+function sanitizePatch(raw) {
+  return (raw || '')
+    .replace(/^```[\w-]*\n?/m, '')
+    .replace(/```\s*$/m, '')
+    .replace(/^diff --git.*\n/mg, '')
+    .trim();
+}
+
+function isUnifiedDiff(text) {
+  return /(^|\n)---\s+.+\n\+\+\+\s+.+/m.test(text) && /(^|\n)@@\s+[-+0-9, ]+@@/m.test(text);
+}
+
+function getPatchStats(patchText) {
+  const lines = patchText.split('\n');
+  let added = 0;
+  let removed = 0;
+  let files = 0;
+
+  for (const line of lines) {
+    if (line.startsWith('+++ ')) files += 1;
+    else if (line.startsWith('+') && !line.startsWith('+++')) added += 1;
+    else if (line.startsWith('-') && !line.startsWith('---')) removed += 1;
+  }
+
+  return { files, added, removed };
+}
+
 function applyPatch(original, patchText) {
-  const result = Diff.applyPatch(original, patchText);
-  if (result === false) throw new Error('O patch não pôde ser aplicado ao arquivo atual.');
+  const normalized = sanitizePatch(patchText);
+  const result = Diff.applyPatch(original, normalized);
+  if (result === false) throw new Error('O patch não pôde ser aplicado ao arquivo atual. Tente uma instrução mais específica.');
   return result;
 }
 
