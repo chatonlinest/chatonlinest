@@ -396,6 +396,7 @@
         model: 'app_model_name'
     };
     const DEFAULT_MODEL = 'gemini-2.0-flash';
+    const CHUNK_MAX_CHARS = 12000;
 
     // ================================
     // 2. Funções de Diff/Patch otimizadas (sem limites)
@@ -517,7 +518,32 @@
             : 'IA não configurada';
     }
 
-    async function callGemini(promptUser, currentDocument, apiKey, model) {
+    function splitDocumentIntoChunks(text, maxChars = CHUNK_MAX_CHARS) {
+        if (text.length <= maxChars) return [text];
+        const paragraphs = text.split(/\n{2,}/);
+        const chunks = [];
+        let current = '';
+        for (const paragraph of paragraphs) {
+            const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+            if (candidate.length <= maxChars) {
+                current = candidate;
+                continue;
+            }
+            if (current) chunks.push(current);
+            if (paragraph.length <= maxChars) {
+                current = paragraph;
+                continue;
+            }
+            for (let i = 0; i < paragraph.length; i += maxChars) {
+                chunks.push(paragraph.slice(i, i + maxChars));
+            }
+            current = '';
+        }
+        if (current) chunks.push(current);
+        return chunks;
+    }
+
+    async function callGemini(promptUser, currentDocument, apiKey, model, chunkMeta = null) {
         const systemInstruction = `Você é um assistente de edição de texto especializado em aplicar solicitações do usuário de forma exata.
 Regras importantes:
 - O usuário vai pedir modificações, adições ou correções sobre o documento atual.
@@ -528,9 +554,13 @@ Regras importantes:
 - Se o pedido for ambíguo, faça a alteração mais plausível, mas nunca comente.
 - IMPORTANTE: Edição precisa. Use apenas o conteúdo final.
 - O diff-patch fará cirurgia super precisa mantendo o resto do conteúdo do arquivo intacto, removendo apenas o que for necessário para implementar o que o usuário pediu.
+- NÃO CORTE o conteúdo. Preserve integralmente todo o trecho recebido.
 - NÃO HÁ LIMITES DE TAMANHO - processe todo o documento completamente.`;
 
-        const fullPrompt = `### DOCUMENTO ATUAL ###\n${currentDocument}\n\n### SOLICITAÇÃO DO USUÁRIO ###\n${promptUser}\n\n### INSTRUÇÃO ###\nGere o DOCUMENTO COMPLETO e modificado conforme o pedido. sem texto adicional.`;
+        const chunkHeader = chunkMeta
+            ? `### CONTEXTO DE CHUNK ###\nVocê está editando o bloco ${chunkMeta.index} de ${chunkMeta.total} do documento completo.\nMantenha todo o conteúdo do bloco e altere apenas o necessário.\n\n`
+            : '';
+        const fullPrompt = `${chunkHeader}### DOCUMENTO ATUAL ###\n${currentDocument}\n\n### SOLICITAÇÃO DO USUÁRIO ###\n${promptUser}\n\n### INSTRUÇÃO ###\nGere o DOCUMENTO COMPLETO e modificado conforme o pedido. sem texto adicional.`;
 
         try {
             const response = await fetch(`${GEMINI_BASE_URL}/${model}:generateContent?key=${apiKey}`, {
@@ -588,7 +618,24 @@ Regras importantes:
         manualPatchBtn.disabled = true;
 
         try {
-            const newDocumentSuggestion = await callGemini(userReq, currentDoc, apiKey, model);
+            const chunks = splitDocumentIntoChunks(currentDoc);
+            const editedChunks = [];
+
+            for (let idx = 0; idx < chunks.length; idx++) {
+                if (chunks.length > 1) {
+                    operationLog.innerHTML = `⏳ Processando conteúdo grande em blocos (${idx + 1}/${chunks.length})...`;
+                }
+                const editedChunk = await callGemini(
+                    userReq,
+                    chunks[idx],
+                    apiKey,
+                    model,
+                    { index: idx + 1, total: chunks.length }
+                );
+                editedChunks.push(editedChunk);
+            }
+
+            const newDocumentSuggestion = editedChunks.join('\n\n');
             
             if (newDocumentSuggestion.length === 0) throw new Error("IA retornou texto vazio.");
 
